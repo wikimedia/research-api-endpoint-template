@@ -14,6 +14,7 @@ setup(
                       'flask',
                       'flask_cors',
                       'mwapi',
-                      'pyyaml'],
+                      'pyyaml',
+                      'uwsgi'],
     package_data={'model': ['config/*']},
 )

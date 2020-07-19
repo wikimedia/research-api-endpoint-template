@@ -54,6 +54,7 @@ echo "Cloning repositories..."
 git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
+pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 # If UI included, consider the following for managing JS dependencies:
