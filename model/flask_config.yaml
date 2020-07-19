@@ -1,0 +1,4 @@
+# User-agent used for querying Wikidata API
+CUSTOM_UA: "wiki-topic (toolforge) -- isaac@wikimedia.org"
+
+DEBUG: False

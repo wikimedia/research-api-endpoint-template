@@ -1,0 +1,15 @@
+[Unit]
+Description=Research API service  # descriptive name
+After=syslog.target  # only start after syslog is up
+
+[Service]
+ExecStart=/usr/local/bin/uwsgi --ini /etc/api-endpoint/uwsgi.ini  # launch uwsgi listener
+User=www-data  # run processes as www-data user
+Group=www-data  # run processes as www-data group
+Restart=always
+StandardError=syslog
+NotifyAccess=all
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
