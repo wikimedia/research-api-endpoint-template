@@ -1,3 +1,6 @@
+# Note: this can be ignored for now -- it is here to support future package management
+# For now, requirements.txt handles the dependencies
+
 from setuptools import setup
 
 setup(

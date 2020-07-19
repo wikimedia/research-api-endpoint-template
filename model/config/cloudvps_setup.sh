@@ -28,6 +28,7 @@ rm -rf ${TMP_PATH}
 mkdir -p ${TMP_PATH}
 mkdir -p ${SRV_PATH}/sock
 mkdir -p ${ETC_PATH}
+mkdir -p ${ETC_PATH}/resources
 mkdir -p ${LOG_PATH}
 mkdir -p ${LIB_PATH}
 
@@ -55,6 +56,7 @@ git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
+pip install
 
 # If UI included, consider the following for managing JS dependencies:
 # echo "Installing front-end resources..."
