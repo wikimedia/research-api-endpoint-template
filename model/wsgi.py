@@ -19,7 +19,7 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 # fast-text model for making predictions
-FT_MODEL = fasttext.load_model('resources/model.bin')
+FT_MODEL = fasttext.load_model(os.path.join(__dir__, 'resources/model.bin'))
 
 @app.route('/api/v1/topic', methods=['GET'])
 def get_topics():
@@ -142,5 +142,7 @@ def validate_api_args():
 
     return lang, page_title, threshold, debug, error
 
+application = app
+
 if __name__ == '__main__':
-    app.run()
+    application.run()
