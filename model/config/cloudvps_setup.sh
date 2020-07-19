@@ -22,6 +22,7 @@ apt-get install -y python3-wheel  # make sure dependencies install correctly eve
 apt-get install -y python3-venv  # for building virtualenv
 apt-get install -y python3-dev  # necessary for fasttext
 apt-get install -y uwsgi
+apt-get install -y uwsgi-plugin-python3
 # potentially add: apt-get install -y git python3 libpython3.7 python3-setuptools
 
 echo "Setting up paths..."
@@ -57,7 +58,6 @@ git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
-pip install
 
 # If UI included, consider the following for managing JS dependencies:
 # echo "Installing front-end resources..."
