@@ -14,6 +14,17 @@ The basic components of the API are as follows:
 * uwsgi: service / protocol through which requests are passed by nginx to the application. This happens via a unix socket. Configuration provided in `config/uwsgi.ini`.
 * flask: Python library that can handle uwsgi requests, do the processing, and serve back responses. Configuration provided in `wsgi.py`
 
+### Data collection
+The default logging by nginx builds an access log located at `/var/log/nginx/access.log` that logs IP, timestamp, referer, request, and user_agent information.
+This can be [updated easily](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#setting-up-the-access-log) to not retain private information.
+If you follow the pattern of a UI on toolforge as the main access point to this API, this will limit much of the private information potentially collected.
+
+### Debugging
+Various commands can be checked to see why your API isn't working:
+* `sudo less /var/log/nginx/error.log`: nginx errors
+* `sudo systemctl status model`: success at getting uWSGI service up and running to pass nginx requests to flask (generally badd uwsgi.ini file)
+* `sudo less /var/log/uwsgi/uwsgi.log`: inspect uWSGI log for startup and handling requests (this is where you're often find Python errors that crashed the service)
+
 ### What this template is not
 This repo does not include a UI for interacting with and contextualizing this API.
 For that, see: <https://github.com/wikimedia/research-api-interface-template>
@@ -22,4 +33,4 @@ For a much simpler combined API endpoint + UI for interacting with it, you can a
 though you will also have much less control over the memory / disk / CPUs available to you.
 
 ### Acknowledgements
-Built from a mixture of <https://github.com/wikimedia/research-recommendation-api> and <https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-uwsgi-and-nginx-on-ubuntu-20-04>.
+Built largely from a mixture of <https://github.com/wikimedia/research-recommendation-api> and <https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-uwsgi-and-nginx-on-ubuntu-20-04>.
