@@ -19,6 +19,15 @@ The default logging by nginx builds an access log located at `/var/log/nginx/acc
 This can be [updated easily](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#setting-up-the-access-log) to not retain private information.
 If you follow the pattern of a UI on toolforge as the main access point to this API, this will limit much of the private information potentially collected.
 
+### Encryption
+There are two important components to this.
+Cloud VPS handles all incoming traffic and enforces HTTPS and maintains the certs to support this.
+This means that a user who visits the cite will see an appropriately-certified, secure connection without any special configuration. 
+The traffic between Cloud VPS and our nginx server, however, is unencrypted by default.
+We must add some special configuration to the nginx configuration to enforce HTTPS on this connection as well then.
+Eventually this will not be required (see https://phabricator.wikimedia.org/T131288), but in the meantime, a simple redirect
+in the nginx configuration (`model.nginx`) will enforce HTTPS.
+
 ### Debugging
 Various commands can be checked to see why your API isn't working:
 * `sudo less /var/log/nginx/error.log`: nginx errors
