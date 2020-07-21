@@ -16,8 +16,8 @@ The basic components of the API are as follows:
 
 ### Data collection
 The default logging by nginx builds an access log located at `/var/log/nginx/access.log` that logs IP, timestamp, referer, request, and user_agent information.
-This can be [updated easily](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#setting-up-the-access-log) to not retain private information.
-If you follow the pattern of a UI on toolforge as the main access point to this API, this will limit much of the private information potentially collected.
+I have overridden that in this repository to remove IP and user-agent so as not to retain private data unnecessariliy.
+This can be [updated easily](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#setting-up-the-access-log).
 
 ### Encryption
 There are two important components to this.
