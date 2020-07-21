@@ -25,7 +25,7 @@ SESSION_WD = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CU
 # fast-text model for making predictions
 FT_MODEL = fasttext.load_model(os.path.join(__dir__, 'resources/model.bin'))
 
-@app.route('/api/v1/wikidata/topic', methods=['GET'])
+@app.route('/api/v1/topic', methods=['GET'])
 def get_topics():
     """Wikidata-based topic modeling endpoint. Makes prediction based on statements associated with Wikidata item."""
     qid, threshold, debug, error = validate_api_args()
