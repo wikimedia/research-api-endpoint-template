@@ -34,7 +34,7 @@ def get_topics():
                   'results': [{'topic': t[0], 'score': t[1]} for t in topics]
                   }
         if debug:
-            result['outlinks'] = outlinks
+            result['outlinks'] = sorted(outlinks)
         return jsonify(result)
 
 def get_predictions(features_str, model, threshold=0.5, debug=False):
