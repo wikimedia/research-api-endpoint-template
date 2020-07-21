@@ -34,6 +34,18 @@ Various commands can be checked to see why your API isn't working:
 * `sudo systemctl status model`: success at getting uWSGI service up and running to pass nginx requests to flask (generally badd uwsgi.ini file)
 * `sudo less /var/log/uwsgi/uwsgi.log`: inspect uWSGI log for startup and handling requests (this is where you're often find Python errors that crashed the service)
 
+
+### Adapting to a new model etc.
+You will probably have to change the following components:
+* `model/wsgi.py`: this is the file with your model / Flask so you'll have to update it depending your desired input URL parameters and output JSON result.
+* `flask_config.yaml`: any Flask config variables that need to be set.
+* `model/config/cloudvps_setup.sh`: you likely will have to change some of the parameters at the top of the file and how you download any larger data/model files. Likewise, `model/config/release.sh` will need to be updated in a similar manner.
+* `model/config/model.nginx`: server name will need to be updated to your instance / proxy (set in Horizon)
+* `model/config/uwsgi.ini`: potentially update number of processes and virtualenv location
+* `model/config/model.service`: potentially update description, though this won't affect the API
+* `requirements.txt`: update to include your Python dependencies
+* Currently `setup.py` is not used, but it would need to be updated in a more complete package system.
+
 ### What this template is not
 This repo does not include a UI for interacting with and contextualizing this API.
 For that, see: <https://github.com/wikimedia/research-api-interface-template>
