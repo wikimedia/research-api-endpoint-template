@@ -15,7 +15,7 @@ LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 
 echo "Updating the system..."
 apt-get update
-apt-get install build-essential  # gcc (c++ compiler) necessary for fasttext
+apt-get install -y build-essential  # gcc (c++ compiler) necessary for fasttext
 apt-get install -y nginx  # handles incoming requests, load balances, and passes to uWSGI to be fulfilled
 apt-get install -y python3-pip  # install dependencies
 apt-get install -y python3-wheel  # make sure dependencies install correctly even when missing wheels
