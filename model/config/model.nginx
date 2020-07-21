@@ -7,7 +7,7 @@ server {
         uwsgi_pass unix:/srv/api-endpoint/sock/model.sock;  # local socket used by nginx to talk to uwsgi
         # force HTTPS (when https://phabricator.wikimedia.org/T131288 is resolved, this presumably can be removed)
         if ($http_x_forwarded_proto = "http") {
-                rewrite  ^/(.*)$  https://wikipedia-topic.wmcloud.org/$1 permanent;
+                rewrite  ^ https://$server_name$request_uri permanent;
         }
     }
 }
