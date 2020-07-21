@@ -4,9 +4,9 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-ETC_PATH='/etc/${APP_LBL}'  # app config info, scripts, ML models, etc.
-SRV_PATH='/srv/${APP_LBL}'  # application resources for serving endpoint
-TMP_PATH='/tmp/${APP_LBL}'  # store temporary files created as part of setting up app (cleared with every update)
+ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
+SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
+TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
 LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 
 # clean up old versions
@@ -25,7 +25,11 @@ echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-# uncomment if config changes:
-# cp ${TMP_PATH}/${REPO_LBL}/config/* ${ETC_PATH}
+# update config / code:
+cp ${TMP_PATH}/${REPO_LBL}/model/config/* ${ETC_PATH}
+# TODO: fix this to be more elegant (one directory or not necessary because run as package)
+cp ${TMP_PATH}/${REPO_LBL}/model/wsgi.py ${ETC_PATH}
+cp ${TMP_PATH}/${REPO_LBL}/model/flask_config.yaml ${ETC_PATH}
+
 
 systemctl restart model.service
