@@ -19,21 +19,19 @@ The default logging by nginx builds an access log located at `/var/log/nginx/acc
 I have overridden that in this repository to remove IP and user-agent so as not to retain private data unnecessariliy.
 This can be [updated easily](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#setting-up-the-access-log).
 
-### Encryption
-There are two important components to this.
-Cloud VPS handles all incoming traffic and enforces HTTPS and maintains the certs to support this.
-This means that a user who visits the cite will see an appropriately-certified, secure connection without any special configuration. 
-The traffic between Cloud VPS and our nginx server, however, is unencrypted by default.
-We must add some special configuration to the nginx configuration to enforce HTTPS on this connection as well then.
-Eventually this will not be required (see https://phabricator.wikimedia.org/T131288), but in the meantime, a simple redirect
+### Privacy and encryption
+For encryption, there are two important components to this:
+* Cloud VPS handles all incoming traffic and enforces HTTPS and maintains the certs to support this. This means that a user who visits the cite will see an appropriately-certified, secure connection without any special configuration. We customize the nginx configuration to enforce HTTPS on client <--> Cloud VPS connection. Eventually this will not be required (see https://phabricator.wikimedia.org/T131288), but in the meantime, a simple redirect
 in the nginx configuration (`model.nginx`) will enforce HTTPS.
+* The traffic between Cloud VPS and our nginx server, however, is unencrypted and currently cannot be encrypted. This is not a large security concern because it's very difficult to snoop on this traffic, but be aware that it is not end-to-end encrypted.
+
+Additionally, [CORS](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing) is enabled so that any external site (e.g., your UI on toolforge) can make API requests. From a privacy perspective, this does not pose any concerns as no private information is served via this API.
 
 ### Debugging
 Various commands can be checked to see why your API isn't working:
 * `sudo less /var/log/nginx/error.log`: nginx errors
 * `sudo systemctl status model`: success at getting uWSGI service up and running to pass nginx requests to flask (generally badd uwsgi.ini file)
 * `sudo less /var/log/uwsgi/uwsgi.log`: inspect uWSGI log for startup and handling requests (this is where you're often find Python errors that crashed the service)
-
 
 ### Adapting to a new model etc.
 You will probably have to change the following components:
@@ -48,7 +46,7 @@ You will probably have to change the following components:
 
 ### What this template is not
 This repo does not include a UI for interacting with and contextualizing this API.
-For that, see: <https://github.com/wikimedia/research-api-interface-template>
+For that, see: <https://github.com/wikimedia/research-api-interface-template> or the [wiki-topic example](https://wiki-topic.toolforge.org/).
 
 For a much simpler combined API endpoint + UI for interacting with it, you can also set up a simple [Flask app in Toolforge](https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool),
 though you will also have much less control over the memory / disk / CPUs available to you.
