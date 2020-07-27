@@ -75,6 +75,7 @@ def get_qid(title, lang, session=None):
             action="query",
             prop="pageprops",
             ppprop='wikibase_item',
+            redirects=True,
             titles=title,
             format='json',
             formatversion=2
