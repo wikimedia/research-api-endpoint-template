@@ -53,7 +53,7 @@ echo "Cloning repositories..."
 
 # The simpler process is to just install dependencies per a requirements.txt file
 # With updates, however, the packages could change, leading to unexpected behavior or errors
-git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch wikipedia-country ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
