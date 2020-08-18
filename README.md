@@ -21,8 +21,7 @@ This can be [updated easily](https://docs.nginx.com/nginx/admin-guide/monitoring
 
 ### Privacy and encryption
 For encryption, there are two important components to this:
-* Cloud VPS handles all incoming traffic and enforces HTTPS and maintains the certs to support this. This means that a user who visits the cite will see an appropriately-certified, secure connection without any special configuration. We customize the nginx configuration to enforce HTTPS on client <--> Cloud VPS connection. Eventually this will not be required (see https://phabricator.wikimedia.org/T131288), but in the meantime, a simple redirect
-in the nginx configuration (`model.nginx`) will enforce HTTPS.
+* Cloud VPS handles all incoming traffic and enforces HTTPS and maintains the certs to support this. This means that a user who visits the cite will see an appropriately-certified, secure connection without any special configuration.
 * The traffic between Cloud VPS and our nginx server, however, is unencrypted and currently cannot be encrypted. This is not a large security concern because it's very difficult to snoop on this traffic, but be aware that it is not end-to-end encrypted.
 
 Additionally, [CORS](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing) is enabled so that any external site (e.g., your UI on toolforge) can make API requests. From a privacy perspective, this does not pose any concerns as no private information is served via this API.

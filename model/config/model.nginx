@@ -6,9 +6,6 @@ server {
     server_name wikipedia-topic.wmcloud.org;  # to create, see: https://wikitech.wikimedia.org/wiki/Help:Using_a_web_proxy_to_reach_Cloud_VPS_servers_from_the_internet
     # remove this line or change 'private' to 'combined' to restore user-agent + IP information
     access_log /var/log/nginx/access.log private;
-    if ($http_x_forwarded_proto = "http") {
-        return 301 https://$server_name$request_uri;  # force HTTPS (when https://phabricator.wikimedia.org/T131288 is resolved, this presumably can be removed)
-    }
 
     location / {
         include uwsgi_params;  # tell nginx to set up simple defaults: https://uwsgi-docs.readthedocs.io/en/latest/Nginx.html
