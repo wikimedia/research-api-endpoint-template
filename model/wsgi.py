@@ -111,6 +111,26 @@ def get_canonical_page_title(title, lang, session=None):
     else:
         return result['query']['pages'][0]['title']
 
+def get_canonical_page_title_from_pid(page_id, lang, session=None):
+    """Resolve redirects / normalization -- used to verify that an input page_title exists"""
+    if session is None:
+        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+
+    result = session.get(
+        action="query",
+        prop="info",
+        inprop='',
+        redirects='',
+        ids=page_id,
+        format='json',
+        formatversion=2
+    )
+    print(result)
+    if 'missing' in result['query']['pages'][0]:
+        return None
+    else:
+        return result['query']['pages'][0]['title']
+
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
@@ -122,6 +142,11 @@ def validate_api_args():
         page_title = get_canonical_page_title(request.args['title'], lang)
         if page_title is None:
             error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, request.args['title'])
+    elif request.args.get('pageid') and request.args.get('lang'):
+        lang = request.args['lang']
+        page_title = get_canonical_page_title_from_pid(request.args['pageid'], lang)
+        if page_title is None:
+            error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/?curid={1}">https://{0}.wikipedia.org/wiki/?curid={1}</a>'.format(lang, request.args['pageid'])
     elif request.args.get('lang'):
         error = 'missing an article title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
     elif request.args.get('title'):
