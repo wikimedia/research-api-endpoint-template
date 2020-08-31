@@ -27,9 +27,12 @@ def get_topics():
         return jsonify({'Error': error})
     else:
         wikiprojects = get_wikiprojects(en_page_title)
-        topics = wikiprojects_to_topics(wikiprojects)
+        if wikiprojects:
+            topics = wikiprojects_to_topics(wikiprojects)
+        else:
+            topics = []
         result = {'article': 'https://en.wikipedia.org/wiki/{0}'.format(en_page_title),
-                  'results': [{'topic': t[0]} for t in topics]
+                  'results': [{'topic': t} for t in topics]
                   }
         if debug:
             result['wikiprojects'] = sorted(wikiprojects)
