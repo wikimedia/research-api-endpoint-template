@@ -1,7 +1,8 @@
 # Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
+from collections import defaultdict
 import os
+import re
 
-import fasttext
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import mwapi
@@ -18,78 +19,51 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-# fast-text model for making predictions
-FT_MODEL = fasttext.load_model(os.path.join(__dir__, 'resources/model.bin'))
-
 @app.route('/api/v1/topic', methods=['GET'])
 def get_topics():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    lang, page_title, threshold, debug, error = validate_api_args()
+    en_page_title, debug, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
-        outlinks = get_outlinks(page_title, lang)
-        topics = get_predictions(features_str=' '.join(outlinks), model=FT_MODEL, threshold=threshold, debug=debug)
-        result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  'results': [{'topic': t[0], 'score': t[1]} for t in topics]
+        wikiprojects = get_wikiprojects(en_page_title)
+        topics = wikiprojects_to_topics(wikiprojects)
+        result = {'article': 'https://en.wikipedia.org/wiki/{0}'.format(en_page_title),
+                  'results': [{'topic': t[0]} for t in topics]
                   }
         if debug:
-            result['outlinks'] = sorted(outlinks)
+            result['wikiprojects'] = sorted(wikiprojects)
         return jsonify(result)
 
-def get_predictions(features_str, model, threshold=0.5, debug=False):
-    """Get fastText model predictions for an input feature string."""
-    lbls, scores = model.predict(features_str, k=-1)
-    results = {l:s for l,s in zip(lbls, scores)}
-    if debug:
-        print(results)
-    sorted_res = [(l.replace("__label__", ""), results[l]) for l in sorted(results, key=results.get, reverse=True)]
-    above_threshold = [r for r in sorted_res if r[1] >= threshold]
-    lbls_above_threshold = []
-    if above_threshold:
-        for res in above_threshold:
-            if debug:
-                print('{0}: {1:.3f}'.format(*res))
-            if res[1] > threshold:
-                lbls_above_threshold.append(res[0])
-    elif debug:
-        print("No label above {0} threshold.".format(threshold))
-        print("Top result: {0} ({1:.3f}) -- {2}".format(sorted_res[0][0], sorted_res[0][1], sorted_res[0][2]))
+def wikiprojects_to_topics(wikiprojects):
+    """Get set of topics for a given set of WikiProjects"""
+    topics = set()
+    for wp in wikiprojects:
+        for wp_part in wp.split('/'):
+            wp_part_normed = norm_wp_name_en(wp_part)
+            for t in WP_TO_TOPIC.get(wp_part_normed, {}):
+                topics.add(t)
+    return sorted(topics)
 
-    return above_threshold
-
-def get_outlinks(title, lang, limit=1000, session=None):
+def get_wikiprojects(en_page_title, session=None):
     """Gather set of up to `limit` outlinks for an article."""
     if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+        session = mwapi.Session('https://en.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
 
-    # generate list of all outlinks (to namespace 0) from the article and their associated Wikidata IDs
+    # generate list of all WikiProjects per PageAssessments API
     result = session.get(
         action="query",
-        generator="links",
-        titles=title,
-        redirects='',
-        prop='pageprops',
-        ppprop='wikibase_item',
-        gplnamespace=0,  # this actually doesn't seem to work :/
-        gpllimit=50,
+        prop="pageassessments",
+        titles=en_page_title,
+        pasubprojects=True,
         format='json',
-        formatversion=2,
-        continuation=True
+        formatversion=2
     )
-    try:
-        outlink_qids = set()
-        for r in result:
-            for outlink in r['query']['pages']:
-                if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
-                    qid = outlink.get('pageprops', {}).get('wikibase_item', None)
-                    if qid is not None:
-                        outlink_qids.add(qid)
-            if len(outlink_qids) > limit:
-                break
-        return outlink_qids
-    except Exception:
+    if 'pageassessments' not in result['query']['pages'][0]:
         return None
+    else:
+        return [wp for wp in result['query']['pages'][0]['pageassessments']]
+
 
 def get_canonical_page_title(title, lang, session=None):
     """Resolve redirects / normalization -- used to verify that an input page_title exists"""
@@ -105,44 +79,98 @@ def get_canonical_page_title(title, lang, session=None):
         format='json',
         formatversion=2
     )
-    print(result)
     if 'missing' in result['query']['pages'][0]:
         return None
     else:
         return result['query']['pages'][0]['title']
 
+def get_english_page_title(title, lang, session=None):
+    """Find English article if exists (for querying for groundtruth data)"""
+    if session is None:
+        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+
+    result = session.get(
+        action="query",
+        prop="langlinks",
+        lllang="en",
+        titles=title,
+        format='json',
+        formatversion=2
+    )
+
+    if 'langlinks' not in result['query']['pages'][0]:
+        return None
+    else:
+        return result['query']['pages'][0]['langlinks'][0]['title']
+
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
     lang = None
-    page_title = None
-    threshold = 0.5
-    if request.args.get('title') and request.args.get('lang'):
-        lang = request.args['lang']
+    en_page_title = None
+    if request.args.get('title'):
+        lang = request.args.get('lang', 'en')  # default to English if not provided
         page_title = get_canonical_page_title(request.args['title'], lang)
         if page_title is None:
             error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, request.args['title'])
+        if lang == 'en':
+            en_page_title = page_title
+        else:
+            en_page_title = get_english_page_title(page_title, lang)
+            if en_page_title is None:
+                error = 'no English equivalent for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, page_title)
+
     elif request.args.get('lang'):
         error = 'missing an article title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-    elif request.args.get('title'):
-        error = 'missing a language -- e.g., "en" for English'
     else:
         error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-
-    if 'threshold' in request.args:
-        try:
-            threshold = float(request.args['threshold'])
-        except ValueError:
-            threshold = "Error: threshold value provided not a float: {0}".format(request.args['threshold'])
 
     debug = False
     if 'debug' in request.args:
         debug = True
-        threshold = 0
 
-    return lang, page_title, threshold, debug, error
+    return en_page_title, debug, error
+
+def norm_wp_name_en(wp):
+    """Normalize WikiProject names in English"""
+    ns_local = 'wikipedia'
+    wp_prefix = 'wikiproject'
+    return re.sub("\s\s+", " ", wp.lower().replace(ns_local + ":", "").replace(wp_prefix, "").strip())
+
+def generate_wp_to_labels(wp_taxonomy):
+    """Build mapping of canonical WikiProject name to topic labels."""
+    wp_to_labels = defaultdict(set)
+    for wikiproject_name, label in _invert_wp_taxonomy(wp_taxonomy):
+        wp_to_labels[norm_wp_name_en(wikiproject_name)].add(label)
+    return wp_to_labels
+
+def _invert_wp_taxonomy(wp_taxonomy, path=None):
+    """Invert hierarchy of topics with associated WikiProjects to WikiProjects with associated labels"""
+    catch_all = None
+    catch_all_wikiprojects = []
+    for key, value in wp_taxonomy.items():
+        path_keys = (path or []) + [key]
+        if key[-1] == "*":
+            # this is a catch-all
+            catch_all = path_keys
+            catch_all_wikiprojects.extend(value)
+            continue
+        elif isinstance(value, list):
+            catch_all_wikiprojects.extend(value)
+            for wikiproject_name in value:
+                yield wikiproject_name, ".".join(path_keys)
+        else:
+            yield from _invert_wp_taxonomy(value, path=path_keys)
+    if catch_all is not None:
+        for wikiproject_name in catch_all_wikiprojects:
+            yield wikiproject_name, ".".join(catch_all)
 
 application = app
+
+with open(os.path.join(__dir__, 'resources/taxonomy.yaml'), 'r') as fin:
+    taxonomy = yaml.safe_load(fin)
+
+WP_TO_TOPIC = generate_wp_to_labels(taxonomy)
 
 if __name__ == '__main__':
     application.run()

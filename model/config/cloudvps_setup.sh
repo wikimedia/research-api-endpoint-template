@@ -5,7 +5,7 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-MODEL_WGET='https://ndownloader.figshare.com/files/<file-number>'  # model binary -- ndownloader.figshare is a good host
+TAXONOMY_WGET='https://raw.githubusercontent.com/wikimedia/wikitax/master/datasets/wikiproject_taxonomy.halfak_20191202.yaml'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -53,7 +53,7 @@ echo "Cloning repositories..."
 
 # The simpler process is to just install dependencies per a requirements.txt file
 # With updates, however, the packages could change, leading to unexpected behavior or errors
-git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch topic-groundtruth ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
@@ -69,8 +69,8 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 echo "Downloading model, hang on..."
 #cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+wget -O taxonomy.yaml ${TAXONOMY_WGET}
+mv taxonomy.yaml ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
