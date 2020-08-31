@@ -6,7 +6,11 @@ The basic pre-requisites are as follows:
 * Cloud VPS web-proxy: <https://wikitech.wikimedia.org/wiki/Help:Using_a_web_proxy_to_reach_Cloud_VPS_servers_from_the_internet>
 
 With these in place, you can [ssh onto](https://wikitech.wikimedia.org/wiki/Help:Accessing_Cloud_VPS_instances#Accessing_Cloud_VPS_instances)
-your instance and use the `cloudvps_setup.sh` script to get a basic API setup.
+your instance and use the `cloudvps_setup.sh` script to get a basic API setup -- e.g.,:
+* From local branch: `scp model/config/cloudvps_setup.sh <your-shell-name>@<your-instance>.<your-project>.eqiad1.wikimedia.cloud:~/`
+* `ssh <your-shell-name>@<your-instance>.<your-project>.eqiad1.wikimedia.cloud`
+* `sudo chmod +x cloudvps_setup.sh`
+* `sudo ./cloudvps_setup.sh`
 
 The basic components of the API are as follows:
 * systemd: Linux service manager that we configure to start up nginx (listen for user requests) and uwsgi (listen for nginx requests). Controlled via `systemctl` utility. Configuration provided in `config/model.service`.
