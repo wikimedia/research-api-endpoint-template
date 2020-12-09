@@ -1,10 +1,12 @@
-# Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
+import bz2
 import os
+import re
+import pickle
 
-import fasttext
+from annoy import AnnoyIndex
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-import mwapi
+import requests
 import yaml
 
 app = Flask(__name__)
@@ -19,130 +21,139 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 # fast-text model for making predictions
-FT_MODEL = fasttext.load_model(os.path.join(__dir__, 'resources/model.bin'))
+ANNOY_INDEX = AnnoyIndex(50, 'angular')
+QID_TO_IDX = {}
+IDX_TO_QID = {}
+K_MAX = 100  # maximum number of neighbors (even if submitted argument is larger)
 
-@app.route('/api/v1/topic', methods=['GET'])
-def get_topics():
+@app.route('/api/v1/outlinks', methods=['GET'])
+def get_neighbors():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    lang, page_title, threshold, debug, error = validate_api_args()
-    if error is not None:
-        return jsonify({'Error': error})
+    args = parse_args()
+    if 'error' is args:
+        return jsonify({'Error': args['error']})
     else:
-        outlinks = get_outlinks(page_title, lang)
-        topics = get_predictions(features_str=' '.join(outlinks), model=FT_MODEL, threshold=threshold, debug=debug)
-        result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  'results': [{'topic': t[0], 'score': t[1]} for t in topics]
-                  }
-        if debug:
-            result['outlinks'] = sorted(outlinks)
+        qid_idx = QID_TO_IDX[args['qid']]
+        result = {'qid':args['qid'], 'lang': args['lang'], 'title':'-', 'results':[]}
+        num_results = 0
+        for idx, dist in zip(*ANNOY_INDEX.get_nns_by_item(qid_idx, K_MAX, include_distances=True)):
+            sim = 1 - dist
+            if sim >= args['threshold'] and idx != qid_idx:
+                result['results'].append({'qid':IDX_TO_QID[idx], 'score':sim})
+                num_results += 1
+            if num_results == args['k']:
+                break
+        add_article_titles(result)
         return jsonify(result)
 
-def get_predictions(features_str, model, threshold=0.5, debug=False):
-    """Get fastText model predictions for an input feature string."""
-    lbls, scores = model.predict(features_str, k=-1)
-    results = {l:s for l,s in zip(lbls, scores)}
-    if debug:
-        print(results)
-    sorted_res = [(l.replace("__label__", ""), results[l]) for l in sorted(results, key=results.get, reverse=True)]
-    above_threshold = [r for r in sorted_res if r[1] >= threshold]
-    lbls_above_threshold = []
-    if above_threshold:
-        for res in above_threshold:
-            if debug:
-                print('{0}: {1:.3f}'.format(*res))
-            if res[1] > threshold:
-                lbls_above_threshold.append(res[0])
-    elif debug:
-        print("No label above {0} threshold.".format(threshold))
-        print("Top result: {0} ({1:.3f}) -- {2}".format(sorted_res[0][0], sorted_res[0][1], sorted_res[0][2]))
-
-    return above_threshold
-
-def get_outlinks(title, lang, limit=1000, session=None):
-    """Gather set of up to `limit` outlinks for an article."""
-    if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
-
-    # generate list of all outlinks (to namespace 0) from the article and their associated Wikidata IDs
-    result = session.get(
-        action="query",
-        generator="links",
-        titles=title,
-        redirects='',
-        prop='pageprops',
-        ppprop='wikibase_item',
-        gplnamespace=0,  # this actually doesn't seem to work :/
-        gpllimit=50,
-        format='json',
-        formatversion=2,
-        continuation=True
-    )
+def parse_args():
+    # number of neighbors
+    k_default = 10  # default number of neighbors
+    k_min = 1
     try:
-        outlink_qids = set()
-        for r in result:
-            for outlink in r['query']['pages']:
-                if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
-                    qid = outlink.get('pageprops', {}).get('wikibase_item', None)
-                    if qid is not None:
-                        outlink_qids.add(qid)
-            if len(outlink_qids) > limit:
-                break
-        return outlink_qids
+        k = max(min(int(request.args.get('k')), K_MAX), k_min)
     except Exception:
-        return None
+        k = k_default
 
-def get_canonical_page_title(title, lang, session=None):
-    """Resolve redirects / normalization -- used to verify that an input page_title exists"""
-    if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+    # seed qid
+    qid = request.args.get('qid').upper()
+    if not validate_qid_format(qid):
+        return {'error': "Error: poorly formatted 'qid' field. {0} does not match 'Q#...'".format(qid)}
+    elif not validate_qid_model(qid):
+        return {'error': "Error: {0} is not included in the model".format(qid)}
 
-    result = session.get(
-        action="query",
-        prop="info",
-        inprop='',
-        redirects='',
-        titles=title,
-        format='json',
-        formatversion=2
-    )
-    print(result)
-    if 'missing' in result['query']['pages'][0]:
-        return None
+    # threshold for similarity to include
+    t_default = 0  # default minimum cosine similarity
+    t_max = 1  # maximum cosine similarity threshold (even if submitted argument is larger)
+    try:
+        threshold = min(float(request.args.get('threshold')), t_max)
+    except Exception:
+        threshold = t_default
+
+    # target language
+    lang = request.args.get('lang', 'en').lower().replace('wiki', '')
+
+    # pass arguments
+    args = {
+        'qid': qid,
+        'k': k,
+        'threshold': threshold,
+        'lang': lang
+            }
+    return args
+
+def validate_qid_format(qid):
+    return re.match('^Q[0-9]+$', qid)
+
+def validate_qid_model(qid):
+    return qid in QID_TO_IDX
+
+def add_article_titles(result_json, n_batch=50):
+    lang = result_json['lang']
+    wiki = '{0}wiki'.format(lang)
+    api_url_base = 'https://wikidata.org/w/api.php'
+
+    params = {
+        'action': 'wbgetentities',
+        'props': 'sitelinks',
+        'format': 'json',
+        'formatversion': 2,
+        'sitefilter': wiki,
+        'ids': result_json['qid']
+    }
+    response = requests.get(api_url_base, params=params)
+    sitelinks = response.json()
+    if result_json['qid'] in sitelinks['entities'] and 'enwiki' in sitelinks['entities'][result_json['qid']].get('sitelinks', {}):
+        result_json['title'] = sitelinks['entities'][result_json['qid']]['sitelinks']['enwiki']['title']
+
+    qids = {r['qid']:idx for idx, r in enumerate(result_json['results'], start=0)}
+    qid_list = list(qids.keys())
+    for i in range(0, len(qid_list), n_batch):
+        qid_batch = qid_list[i:i+n_batch]
+        params = {
+            'action':'wbgetentities',
+            'props':'sitelinks',
+            'format':'json',
+            'formatversion':2,
+            'sitefilter':wiki,
+            'ids':'|'.join(qid_batch)
+        }
+        response = requests.get(api_url_base, params=params)
+        sitelinks = response.json()
+        for qid in qid_batch:
+            # get title in selected wikis
+            qid_idx = qids[qid]
+            if qid in sitelinks['entities'] and 'enwiki' in sitelinks['entities'][qid].get('sitelinks', {}):
+                result_json['results'][qid_idx]['title'] = sitelinks['entities'][qid]['sitelinks']['enwiki']['title']
+            else:
+                result_json['results'][qid_idx]['title'] = '-'
+
+def load_similarity_index():
+    global IDX_TO_QID
+    global QID_TO_IDX
+    index_fp = os.path.join(__dir__, 'resources/embeddings.ann')
+    qidmap_fp = os.path.join(__dir__, 'resources/qid_to_idx.pickle')
+    if os.path.exists(index_fp):
+        ANNOY_INDEX.load(index_fp)
+        with open(qidmap_fp, 'rb') as fin:
+            QID_TO_IDX = pickle.load(fin)
     else:
-        return result['query']['pages'][0]['title']
-
-def validate_api_args():
-    """Validate API arguments for language-agnostic model."""
-    error = None
-    lang = None
-    page_title = None
-    threshold = 0.5
-    if request.args.get('title') and request.args.get('lang'):
-        lang = request.args['lang']
-        page_title = get_canonical_page_title(request.args['title'], lang)
-        if page_title is None:
-            error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, request.args['title'])
-    elif request.args.get('lang'):
-        error = 'missing an article title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-    elif request.args.get('title'):
-        error = 'missing a language -- e.g., "en" for English'
-    else:
-        error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-
-    if 'threshold' in request.args:
-        try:
-            threshold = float(request.args['threshold'])
-        except ValueError:
-            threshold = "Error: threshold value provided not a float: {0}".format(request.args['threshold'])
-
-    debug = False
-    if 'debug' in request.args:
-        debug = True
-        threshold = 0
-
-    return lang, page_title, threshold, debug, error
+        with bz2.open(os.path.join(__dir__, 'resources/embeddings.tsv.bz2'), 'rt') as fin:
+            for idx, line in enumerate(fin, start=0):
+                line = line.strip().split('\t')
+                qid = line[0]
+                QID_TO_IDX[qid] = idx
+                emb = [float(d) for d in line[1].split()]
+                ANNOY_INDEX.add_item(idx, emb)
+        ANNOY_INDEX.build(100)
+        ANNOY_INDEX.save(index_fp)
+        with open(qidmap_fp, 'wb') as fout:
+            pickle.dump(QID_TO_IDX, fout)
+    IDX_TO_QID = {v:k for k,v in QID_TO_IDX.items()}
+    print("{0} QIDs in nearset neighbor index.".format(len(QID_TO_IDX)))
 
 application = app
+load_similarity_index()
 
 if __name__ == '__main__':
     application.run()

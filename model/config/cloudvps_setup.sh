@@ -53,7 +53,7 @@ echo "Cloning repositories..."
 
 # The simpler process is to just install dependencies per a requirements.txt file
 # With updates, however, the packages could change, leading to unexpected behavior or errors
-git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch content-similarity ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
@@ -70,7 +70,7 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 echo "Downloading model, hang on..."
 #cd ${TMP_PATH}
 #wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+mv embeddings.tsv.bz2 ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
