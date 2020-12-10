@@ -133,8 +133,8 @@ def load_similarity_index():
                 ANNOY_INDEX.add_item(idx, emb)
                 if idx + 1 % 1000000 == 0:
                     print("{0} embeddings loaded.".format(idx))
-        print("Building AnnoyIndex with 50 trees.")
-        ANNOY_INDEX.build(50)
+        print("Building AnnoyIndex with 25 trees.")
+        ANNOY_INDEX.build(25)
         with open(qidmap_fp, 'wb') as fout:
             pickle.dump(QID_TO_IDX, fout)
     IDX_TO_QID = {v:k for k,v in QID_TO_IDX.items()}
