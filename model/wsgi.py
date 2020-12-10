@@ -34,17 +34,17 @@ def get_neighbors():
         return jsonify({'Error': args['error']})
     else:
         qid_idx = QID_TO_IDX[args['qid']]
-        result = {'qid':args['qid'], 'lang': args['lang'], 'title':'-', 'results':[]}
+        results = []
         num_results = 0
         for idx, dist in zip(*ANNOY_INDEX.get_nns_by_item(qid_idx, K_MAX, include_distances=True)):
             sim = 1 - dist
-            if sim >= args['threshold'] and idx != qid_idx:
-                result['results'].append({'qid':IDX_TO_QID[idx], 'score':sim})
+            if sim >= args['threshold']:  #  and idx != qid_idx
+                results.append({'qid':IDX_TO_QID[idx], 'score':sim})
                 num_results += 1
             if num_results == args['k']:
                 break
-        add_article_titles(result)
-        return jsonify(result)
+        add_article_titles(args['lang'], results)
+        return jsonify(results)
 
 def parse_args():
     # number of neighbors
@@ -88,25 +88,11 @@ def validate_qid_format(qid):
 def validate_qid_model(qid):
     return qid in QID_TO_IDX
 
-def add_article_titles(result_json, n_batch=50):
-    lang = result_json['lang']
+def add_article_titles(lang, results, n_batch=50):
     wiki = '{0}wiki'.format(lang)
     api_url_base = 'https://wikidata.org/w/api.php'
 
-    params = {
-        'action': 'wbgetentities',
-        'props': 'sitelinks',
-        'format': 'json',
-        'formatversion': 2,
-        'sitefilter': wiki,
-        'ids': result_json['qid']
-    }
-    response = requests.get(api_url_base, params=params)
-    sitelinks = response.json()
-    if result_json['qid'] in sitelinks['entities'] and 'enwiki' in sitelinks['entities'][result_json['qid']].get('sitelinks', {}):
-        result_json['title'] = sitelinks['entities'][result_json['qid']]['sitelinks']['enwiki']['title']
-
-    qids = {r['qid']:idx for idx, r in enumerate(result_json['results'], start=0)}
+    qids = {r['qid']:idx for idx, r in enumerate(results, start=0)}
     qid_list = list(qids.keys())
     for i in range(0, len(qid_list), n_batch):
         qid_batch = qid_list[i:i+n_batch]
@@ -123,10 +109,7 @@ def add_article_titles(result_json, n_batch=50):
         for qid in qid_batch:
             # get title in selected wikis
             qid_idx = qids[qid]
-            if qid in sitelinks['entities'] and 'enwiki' in sitelinks['entities'][qid].get('sitelinks', {}):
-                result_json['results'][qid_idx]['title'] = sitelinks['entities'][qid]['sitelinks']['enwiki']['title']
-            else:
-                result_json['results'][qid_idx]['title'] = '-'
+            results[qid_idx]['title'] = sitelinks['entities'].get(qid, {}).get('sitelinks', {}).get('enwiki', {}).get('title', '-')
 
 def load_similarity_index():
     global IDX_TO_QID
@@ -134,10 +117,13 @@ def load_similarity_index():
     index_fp = os.path.join(__dir__, 'resources/embeddings.ann')
     qidmap_fp = os.path.join(__dir__, 'resources/qid_to_idx.pickle')
     if os.path.exists(index_fp):
+        print("Using pre-built ANNOY index")
         ANNOY_INDEX.load(index_fp)
         with open(qidmap_fp, 'rb') as fin:
             QID_TO_IDX = pickle.load(fin)
     else:
+        print("Builing ANNOY index")
+        ANNOY_INDEX.on_disk_build(index_fp)
         with bz2.open(os.path.join(__dir__, 'resources/embeddings.tsv.bz2'), 'rt') as fin:
             for idx, line in enumerate(fin, start=0):
                 line = line.strip().split('\t')
@@ -145,8 +131,10 @@ def load_similarity_index():
                 QID_TO_IDX[qid] = idx
                 emb = [float(d) for d in line[1].split()]
                 ANNOY_INDEX.add_item(idx, emb)
-        ANNOY_INDEX.build(100)
-        ANNOY_INDEX.save(index_fp)
+                if idx + 1 % 1000000 == 0:
+                    print("{0} embeddings loaded.".format(idx))
+        print("Building AnnoyIndex with 50 trees.")
+        ANNOY_INDEX.build(50)
         with open(qidmap_fp, 'wb') as fout:
             pickle.dump(QID_TO_IDX, fout)
     IDX_TO_QID = {v:k for k,v in QID_TO_IDX.items()}
