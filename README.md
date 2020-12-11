@@ -47,6 +47,12 @@ You will probably have to change the following components:
 * `requirements.txt`: update to include your Python dependencies
 * Currently `setup.py` is not used, but it would need to be updated in a more complete package system.
 
+### Managing large files
+A common dependency for these APIs is some sort of trained machine-learning model. The following scenarios assume the file originates on the [stat100x machines](https://wikitech.wikimedia.org/wiki/Analytics/Systems/Clients) and can be made public. If the file is a research dataset that would be valuable as a public resource, doing a formal [data release](https://wikitech.wikimedia.org/wiki/Data_releases) and uploading to Figshare or a related site is likely the best solution.
+* Small (e.g., <1GB), temporary: probably easiest to just scp these files to your local laptop and then back up to the Cloud VPS instance.
+* Large (e.g., <20GB), temporary: use the [web publication](https://wikitech.wikimedia.org/wiki/Analytics/Web_publication) process to make available in the one-off folder and then `wget` the file to your Cloud VPS instance. You can then remove it from the web publication folder.
+* Really large: talk to analytics.
+
 ### What this template is not
 This repo does not include a UI for interacting with and contextualizing this API.
 For that, see: <https://github.com/wikimedia/research-api-interface-template> or the [wiki-topic example](https://wiki-topic.toolforge.org/).
