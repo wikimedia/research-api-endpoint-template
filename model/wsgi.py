@@ -38,7 +38,7 @@ def get_regions():
 def get_groundtruth(qid):
     """Get fastText model predictions for an input feature string."""
     if qid in GROUNDTRUTH:
-        return GROUNDTRUTH[qid]
+        return [IDX_TO_COUNTRY[idx] for idx in GROUNDTRUTH[qid]]
     else:
         return []
 
