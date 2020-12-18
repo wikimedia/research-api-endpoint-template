@@ -56,7 +56,7 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 echo "Downloading model, hang on..."
 #cd ${TMP_PATH}
 wget -O region_groundtruth.json.bz2 ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+mv region_groundtruth.json.bz2 ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}

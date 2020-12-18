@@ -19,6 +19,8 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 GROUNDTRUTH = {}
+IDX_TO_COUNTRY = {}
+COUNTRY_TO_IDX = {}
 
 @app.route('/api/v1/region', methods=['GET'])
 def get_regions():
@@ -65,7 +67,16 @@ def load_data():
             item = line['item']
             regions = line['region_list']
             if regions:
-                GROUNDTRUTH[item] = regions
+                region_idcs = []
+                for r in regions:
+                    if r in COUNTRY_TO_IDX:
+                        idx = COUNTRY_TO_IDX[r]
+                    else:
+                        idx = len(COUNTRY_TO_IDX)
+                        COUNTRY_TO_IDX[r] = idx
+                        IDX_TO_COUNTRY[idx] = r
+                    region_idcs.append(idx)
+                GROUNDTRUTH[item] = region_idcs
 
 application = app
 load_data()
