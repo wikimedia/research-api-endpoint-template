@@ -77,6 +77,7 @@ def load_data():
                         IDX_TO_COUNTRY[idx] = r
                     region_idcs.append(idx)
                 GROUNDTRUTH[item] = region_idcs
+    print("{0} QIDs in groundtruth for {1} regions".format(len(GROUNDTRUTH), len(COUNTRY_TO_IDX)))
 
 application = app
 load_data()
