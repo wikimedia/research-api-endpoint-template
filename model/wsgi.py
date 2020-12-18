@@ -109,7 +109,7 @@ def add_article_titles(lang, results, n_batch=50):
         for qid in qid_batch:
             # get title in selected wikis
             qid_idx = qids[qid]
-            results[qid_idx]['title'] = sitelinks['entities'].get(qid, {}).get('sitelinks', {}).get('enwiki', {}).get('title', '-')
+            results[qid_idx]['title'] = sitelinks['entities'].get(qid, {}).get('sitelinks', {}).get(wiki, {}).get('title', '-')
 
 def load_similarity_index():
     global IDX_TO_QID
