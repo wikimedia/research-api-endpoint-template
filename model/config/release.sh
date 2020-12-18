@@ -13,7 +13,7 @@ LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 rm -rf ${TMP_PATH}
 mkdir -p ${TMP_PATH}
 
-git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch region-groundtruth ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 # reinstall virtualenv
 rm -rf ${LIB_PATH}/p3env

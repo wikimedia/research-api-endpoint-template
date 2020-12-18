@@ -5,7 +5,7 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-MODEL_WGET='https://ndownloader.figshare.com/files/<file-number>'  # model binary -- ndownloader.figshare is a good host
+MODEL_WGET='https://ndownloader.figshare.com/files/25742033'  # model binary -- ndownloader.figshare is a good host
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -39,21 +39,7 @@ python3 -m venv ${LIB_PATH}/p3env
 source ${LIB_PATH}/p3env/bin/activate
 
 echo "Cloning repositories..."
-# NOTE: a more stable install would involve building wheels on an identical instance and then the following:
-# NOTE: see (https://gerrit.wikimedia.org/g/research/recommendation-api/wheels/+/refs/heads/master) for an example.
-# git clone https://gerrit.wikimedia.org/r/research/recommendation-api/wheels ${TMP_PATH}/wheels
-# echo "Making wheel files..."
-# cd ${TMP_PATH}/wheels
-# rm -rf wheels/*.whl
-# make
-# git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
-# echo "Installing repositories..."
-# pip3 install --no-deps ${TMP_PATH}/wheels/wheels/*.whl
-# pip3 install --no-deps ${TMP_PATH}/recommendation-api
-
-# The simpler process is to just install dependencies per a requirements.txt file
-# With updates, however, the packages could change, leading to unexpected behavior or errors
-git clone ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch region-groundtruth ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
@@ -69,7 +55,7 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 echo "Downloading model, hang on..."
 #cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
+wget -O region_groundtruth.json.bz2 ${MODEL_WGET}
 #mv model.bin ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
