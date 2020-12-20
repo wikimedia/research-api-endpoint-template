@@ -25,14 +25,14 @@ COUNTRY_TO_IDX = {}
 @app.route('/api/v1/region', methods=['GET'])
 def get_regions():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    qid, error = validate_api_args()
+    qids, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
-        regions = get_groundtruth(qid)
-        result = {'qid': 'https://wikidata.org/wiki/{0}'.format(qid),
-                  'results': regions
-                  }
+        result = []
+        for qid in qids:
+            result.append({'qid': qid,
+                           'regions': get_groundtruth(qid)})
         return jsonify(result)
 
 def get_groundtruth(qid):
@@ -49,15 +49,17 @@ def validate_qid(qid):
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
-    qid = None
+    qids = []
     if 'qid' in request.args:
-        qid = request.args['qid'].upper()
-        if not validate_qid(qid):
-            error = "Error: poorly formatted 'qid' field. {0} does not match 'Q#...'".format(qid)
+        for qid in request.args['qid'].upper().split('|'):
+            if validate_qid(qid):
+                qids.append(qid)
+        if not qids:
+            error = "Error: poorly formatted 'qid' field. '{0}' does not match 'Q#...'".format(request.args['qid'].upper())
     else:
         error = "Error: no 'qid' in URL parameters. Please specify."
 
-    return qid, error
+    return qids, error
 
 def load_data():
     print("Loading groundtruth data")
