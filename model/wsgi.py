@@ -24,7 +24,9 @@ cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 ANNOY_INDEX = AnnoyIndex(50, 'angular')
 QID_TO_IDX = {}
 IDX_TO_QID = {}
-K_MAX = 100  # maximum number of neighbors (even if submitted argument is larger)
+K_MAX = 500  # maximum number of neighbors (even if submitted argument is larger)
+
+WIKIPEDIA_LANGUAGE_CODES = {'aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu'}
 
 @app.route('/api/v1/outlinks', methods=['GET'])
 def get_neighbors():
@@ -35,23 +37,76 @@ def get_neighbors():
     else:
         qid_idx = QID_TO_IDX[args['qid']]
         results = []
-        num_results = 0
-        for idx, dist in zip(*ANNOY_INDEX.get_nns_by_item(qid_idx, K_MAX, include_distances=True)):
+        for idx, dist in zip(*ANNOY_INDEX.get_nns_by_item(qid_idx, args['k'], include_distances=True)):
             sim = 1 - dist
             if sim >= args['threshold']:  #  and idx != qid_idx
                 results.append({'qid':IDX_TO_QID[idx], 'score':sim})
-                num_results += 1
-            if num_results == args['k']:
+            else:
                 break
         add_article_titles(args['lang'], results)
         return jsonify(results)
 
+@app.route('/api/v1/outlinks-interactive', methods=['GET'])
+def get_neighbors_interactive():
+    """Interactive Wikipedia-based topic modeling endpoint. Takes positive/negative constraints on list."""
+    args = parse_args_interactive()
+    if 'error' is args:
+        return jsonify({'Error': args['error']})
+    else:
+        search_k = int(args['k'] * ANNOY_INDEX.get_n_trees() / max(len(args['pos']) + len(args['neg']), ANNOY_INDEX.get_n_trees()))
+        neg = {}
+        for qid in args['neg']:
+            qid_idx = QID_TO_IDX[qid]
+            for rank, idx in enumerate(ANNOY_INDEX.get_nns_by_item(qid_idx, args['k'], search_k=search_k, include_distances=False)):
+                if idx == qid_idx:
+                    continue
+                qid_nei = IDX_TO_QID[idx]
+                if qid_nei not in args['pos']:
+                    if qid_nei not in neg:
+                        neg[qid_nei] = []
+                    neg[qid_nei].append(args['k'] - rank)
+        # average inverse rank -- missing ranks then default to 0 which makes sense
+        # more highly ranked items -> larger numbers
+        for qid in neg:
+            neg[qid] = int(sum(neg[qid]) / len(args['neg']))
+
+        pos = {}
+        avg_min_sim = 0
+        for qid in args['pos']:
+            qid_idx = QID_TO_IDX[qid]
+            indices, distances = ANNOY_INDEX.get_nns_by_item(qid_idx, args['k'], search_k=search_k, include_distances=True)
+            avg_min_sim += distances[-1]
+            for i, idx in enumerate(indices):
+                qid_nei = IDX_TO_QID[idx]
+                try:
+                    sim = 1 - distances[i + neg.get(qid_nei, 0)]
+                except IndexError:
+                    sim = 1 - distances[-1]
+                if qid_nei not in args['neg']:
+                    if qid_nei not in pos:
+                        pos[qid_nei] = []
+                    pos[qid_nei].append(sim)
+        avg_min_sim = avg_min_sim / len(args['pos'])
+        for qid in pos:
+            pos[qid] = (sum(pos[qid]) + (avg_min_sim * (len(args['pos']) - len(pos[qid])))) / len(args['pos'])
+
+        results = [{'qid':qid, 'score':score} for qid,score in pos.items() if score >= args['threshold']]
+        add_article_titles(args['lang'], results)
+        return jsonify(results)
+
+def parse_args_interactive():
+    args = parse_args()
+    if 'error' not in args:
+        args['pos'] = [args['qid']] + [qid for qid in request.args.get('pos','').upper().split('|') if validate_qid_model(qid)]
+        args['neg'] = [qid for qid in request.args.get('neg', '').upper().split('|') if validate_qid_model(qid)]
+    return args
+
 def parse_args():
     # number of neighbors
-    k_default = 10  # default number of neighbors
+    k_default = 11  # default number of neighbors
     k_min = 1
     try:
-        k = max(min(int(request.args.get('k')), K_MAX), k_min)
+        k = max(min(int(request.args.get('k')), K_MAX), k_min) + 1
     except Exception:
         k = k_default
 
@@ -72,6 +127,8 @@ def parse_args():
 
     # target language
     lang = request.args.get('lang', 'en').lower().replace('wiki', '')
+    if lang not in WIKIPEDIA_LANGUAGE_CODES:
+        lang = 'en'
 
     # pass arguments
     args = {
