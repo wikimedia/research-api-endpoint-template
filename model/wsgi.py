@@ -84,7 +84,7 @@ def get_neighbors_interactive():
                     sim = 1 - distances[i + neg.get(qid_nei, 0)]
                 except IndexError:
                     sim = 1 - distances[-1]
-                if qid_nei not in args['neg'] and qid_nei not in args['skip']:
+                if qid_nei not in args['neg'] and qid_nei not in args['skip'] and qid_nei not in args['pos']:
                     if qid_nei not in pos:
                         pos[qid_nei] = []
                     pos[qid_nei].append(sim)
@@ -99,6 +99,7 @@ def get_neighbors_interactive():
 
 def parse_args_interactive():
     args = parse_args()
+    args['k'] += 1
     if 'error' not in args:
         args['pos'] = [args['qid']] + [qid for qid in request.args.get('pos','').upper().split('|') if validate_qid_model(qid)]
         args['neg'] = [qid for qid in request.args.get('neg', '').upper().split('|') if validate_qid_model(qid)]
@@ -107,7 +108,7 @@ def parse_args_interactive():
 
 def parse_args():
     # number of neighbors
-    k_default = 11  # default number of neighbors
+    k_default = 10  # default number of neighbors
     k_min = 1
     try:
         k = max(min(int(request.args.get('k')), K_MAX), k_min) + 1
