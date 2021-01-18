@@ -99,8 +99,8 @@ def get_neighbors_interactive():
 
 def parse_args_interactive():
     args = parse_args()
-    args['k'] += 1
     if 'error' not in args:
+        args['k'] += 1
         args['pos'] = [args['qid']] + [qid for qid in request.args.get('pos','').upper().split('|') if validate_qid_model(qid)]
         args['neg'] = [qid for qid in request.args.get('neg', '').upper().split('|') if validate_qid_model(qid)]
         args['skip'] = [qid for qid in request.args.get('skip', '').upper().split('|') if validate_qid_model(qid)]
@@ -119,7 +119,7 @@ def parse_args():
     qid = request.args.get('qid').upper()
     if not validate_qid_format(qid):
         return {'error': "Error: poorly formatted 'qid' field. {0} does not match 'Q#...'".format(qid)}
-    elif not validate_qid_model(qid):
+    if not validate_qid_model(qid):
         return {'error': "Error: {0} is not included in the model".format(qid)}
 
     # threshold for similarity to include
