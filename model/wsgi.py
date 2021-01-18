@@ -53,7 +53,7 @@ def get_neighbors_interactive():
     if 'error' is args:
         return jsonify({'Error': args['error']})
     else:
-        search_k = int(args['k'] * ANNOY_INDEX.get_n_trees() / max(len(args['pos']) + len(args['neg']), ANNOY_INDEX.get_n_trees()))
+        search_k = int(args['k'] * ANNOY_INDEX.get_n_trees() / min(len(args['pos']) + len(args['neg']), ANNOY_INDEX.get_n_trees()))
         neg = {}
         for qid in args['neg']:
             qid_idx = QID_TO_IDX[qid]
