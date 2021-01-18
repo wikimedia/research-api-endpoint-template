@@ -32,7 +32,7 @@ WIKIPEDIA_LANGUAGE_CODES = {'aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', '
 def get_neighbors():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
     args = parse_args()
-    if 'error' is args:
+    if 'error' in args:
         return jsonify({'Error': args['error']})
     else:
         qid_idx = QID_TO_IDX[args['qid']]
@@ -50,7 +50,7 @@ def get_neighbors():
 def get_neighbors_interactive():
     """Interactive Wikipedia-based topic modeling endpoint. Takes positive/negative constraints on list."""
     args = parse_args_interactive()
-    if 'error' is args:
+    if 'error' in args:
         return jsonify({'Error': args['error']})
     else:
         search_k = int(args['k'] * ANNOY_INDEX.get_n_trees() / min(len(args['pos']) + len(args['neg']), ANNOY_INDEX.get_n_trees()))
