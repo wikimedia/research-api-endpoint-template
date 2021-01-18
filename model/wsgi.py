@@ -91,7 +91,7 @@ def get_neighbors_interactive():
             pos[qid] = (sum(pos[qid]) + (avg_min_sim * (len(args['pos']) - len(pos[qid])))) / len(args['pos'])
 
         results = [{'qid':qid, 'score':score} for qid,score in pos.items() if score >= args['threshold']]
-        results = sorted(results, key=lambda x:x['score'], reverse=True)
+        results = sorted(results, key=lambda x:x['score'], reverse=True)[:args['k']]
         add_article_titles(args['lang'], results)
         return jsonify(results)
 
