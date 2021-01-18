@@ -61,7 +61,7 @@ def get_neighbors_interactive():
                 if idx == qid_idx:
                     continue
                 qid_nei = IDX_TO_QID[idx]
-                if qid_nei not in args['pos']:
+                if qid_nei not in args['pos'] and qid_nei not in args['skip']:
                     if qid_nei not in neg:
                         neg[qid_nei] = []
                     neg[qid_nei].append(args['k'] - rank)
@@ -74,7 +74,9 @@ def get_neighbors_interactive():
         avg_min_sim = 0
         for qid in args['pos']:
             qid_idx = QID_TO_IDX[qid]
-            indices, distances = ANNOY_INDEX.get_nns_by_item(qid_idx, args['k'], search_k=search_k, include_distances=True)
+            # I bump args['k'] because in practice I find that the result sets are slightly too small
+            # This is due to filters and the impreciseness of the search trees used by Annoy
+            indices, distances = ANNOY_INDEX.get_nns_by_item(qid_idx, args['k']+10, search_k=search_k, include_distances=True)
             avg_min_sim += distances[-1]
             for i, idx in enumerate(indices):
                 qid_nei = IDX_TO_QID[idx]
@@ -82,7 +84,7 @@ def get_neighbors_interactive():
                     sim = 1 - distances[i + neg.get(qid_nei, 0)]
                 except IndexError:
                     sim = 1 - distances[-1]
-                if qid_nei not in args['neg']:
+                if qid_nei not in args['neg'] and qid_nei not in args['skip']:
                     if qid_nei not in pos:
                         pos[qid_nei] = []
                     pos[qid_nei].append(sim)
@@ -100,6 +102,7 @@ def parse_args_interactive():
     if 'error' not in args:
         args['pos'] = [args['qid']] + [qid for qid in request.args.get('pos','').upper().split('|') if validate_qid_model(qid)]
         args['neg'] = [qid for qid in request.args.get('neg', '').upper().split('|') if validate_qid_model(qid)]
+        args['skip'] = [qid for qid in request.args.get('skip', '').upper().split('|') if validate_qid_model(qid)]
     return args
 
 def parse_args():
