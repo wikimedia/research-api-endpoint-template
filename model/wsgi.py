@@ -38,9 +38,9 @@ def get_regions():
                      'regions': []}
             for region in get_groundtruth(qid):
                 qidr['regions'].append({'region':region,
-                                        'subcontinent': REGION_TO_AGGS['subcontinent'],
-                                        'continent': REGION_TO_AGGS['continent'],
-                                        'global_ns': REGION_TO_AGGS['global_ns']})
+                                        'subcontinent': REGION_TO_AGGS[region]['subcontinent'],
+                                        'continent': REGION_TO_AGGS[region]['continent'],
+                                        'global_ns': REGION_TO_AGGS[region]['global_ns']})
             result.append(qidr)
         return jsonify(result)
 
