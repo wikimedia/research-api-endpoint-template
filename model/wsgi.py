@@ -1,5 +1,6 @@
 # Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
 import bz2
+import csv
 import json
 import os
 import re
@@ -20,6 +21,7 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 GROUNDTRUTH = {}
+REGION_TO_AGGS = {}
 IDX_TO_COUNTRY = {}
 COUNTRY_TO_IDX = {}
 WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
@@ -33,8 +35,14 @@ def get_regions():
     else:
         result = []
         for qid in qids:
-            result.append({'qid': qid,
-                           'regions': get_groundtruth(qid)})
+            qidr =  {'qid': qid,
+                     'regions': []}
+            for region in get_groundtruth(qid):
+                qidr['regions'].append({'region':region,
+                                        'subcontinent': REGION_TO_AGGS['subcontinent'],
+                                        'continent': REGION_TO_AGGS['continent'],
+                                        'global_ns': REGION_TO_AGGS['global_ns']})
+            result.append(qidr)
         return jsonify(result)
 
 def get_groundtruth(qid):
@@ -104,11 +112,12 @@ def validate_api_args():
 
 def load_data():
     print("Loading groundtruth data")
-    with bz2.open(os.path.join(__dir__, 'resources/region_groundtruth.json.bz2'), 'r') as fin:
-        for line_str in fin:
-            line = json.loads(line_str)
-            item = line['item']
-            regions = line['region_list']
+    with bz2.open(os.path.join(__dir__, 'resources/region_groundtruth.tsv.bz2'), 'rt') as fin:
+        tsvreader = csv.reader(fin, delimiter='\t')
+        assert next(tsvreader) == ['item', 'countries']
+        for line in tsvreader:
+            item = line[0]
+            regions = line[1].split('|')
             if regions:
                 region_idcs = []
                 for r in regions:
@@ -122,7 +131,23 @@ def load_data():
                 GROUNDTRUTH[item] = region_idcs
     print("{0} QIDs in groundtruth for {1} regions".format(len(GROUNDTRUTH), len(COUNTRY_TO_IDX)))
 
+def load_region_map():
+    print("Loading region names data")
+    with open(os.path.join(__dir__, 'resources/regions.tsv'), 'r') as fin:
+        tsvreader = csv.reader(fin, delimiter='\t')
+        assert next(tsvreader) == ['Canonical Name', 'Sub-continent Region', 'Continent', 'Global N/S', 'IBAN 3-Digit Country Code', 'UN Name', 'Wikidata ID']
+        for line in tsvreader:
+            region = line[0]
+            subcontinent = line[1]
+            continent = line[2]
+            global_ns = line[3]
+            REGION_TO_AGGS[region] = {'subcontinent':subcontinent,
+                                      'continent':continent,
+                                      'global_ns':global_ns}
+    print("Mappings for {0} regions loaded".format(len(REGION_TO_AGGS)))
+
 application = app
+load_region_map()
 load_data()
 
 if __name__ == '__main__':
