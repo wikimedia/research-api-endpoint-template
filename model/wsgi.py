@@ -1,7 +1,6 @@
 # Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
 import bz2
 import csv
-import json
 import os
 import re
 
@@ -128,7 +127,7 @@ def load_data():
                         COUNTRY_TO_IDX[r] = idx
                         IDX_TO_COUNTRY[idx] = r
                     region_idcs.append(idx)
-                GROUNDTRUTH[item] = region_idcs
+                GROUNDTRUTH[item] = tuple(region_idcs)
     print("{0} QIDs in groundtruth for {1} regions".format(len(GROUNDTRUTH), len(COUNTRY_TO_IDX)))
 
 def load_region_map():
