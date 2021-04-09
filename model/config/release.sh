@@ -4,12 +4,10 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='turnilo'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/wikimedia/research-api-endpoint-template.git'  # for `git clone`
-DATA_WGET='https://ndownloader.figshare.com/files/<file-number>'  # model binary -- ndownloader.figshare is a good host
+DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/referrals/data.json'  # data for Turnilo
 
-ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
-SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
+ETC_PATH="/etc/${APP_LBL}"  # system/app config info
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
-LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 
 # clean up old versions
 rm -rf ${TMP_PATH}
