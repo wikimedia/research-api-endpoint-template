@@ -20,13 +20,14 @@ git clone --branch turnilo ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 echo "Downloading model, hang on..."
 #cd ${TMP_PATH}
 #wget -O data.json ${DATA_WGET}
-#mv data.json ${ETC_PATH}/resources
+#mv data.json ${ETC_PATH}
 #chown -R www-data:www-data ${ETC_PATH}
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."
-cp ${TMP_PATH}/${REPO_LBL}/model/config/* ${ETC_PATH}
-# TODO: fix this to be more elegant (one directory or not necessary because run as package)
+cp ${TMP_PATH}/${REPO_LBL}/model/config/config.yaml ${ETC_PATH}
+cp ${TMP_PATH}/${REPO_LBL}/model/config/model.nginx ${ETC_PATH}
+cp ${TMP_PATH}/${REPO_LBL}/model/config/model.service ${ETC_PATH}
 cp ${ETC_PATH}/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model

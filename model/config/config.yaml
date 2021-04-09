@@ -1,0 +1,63 @@
+dataCubes:
+  - name: referrals
+    title: Search Engine Referrals
+    description: |
+      (Synthetic) Data on search engine referrals to Wikipedia. Split by country, language, OS, and browser.
+    clusterName: native
+    source: data.json
+    timeAttribute: time
+
+    refreshRule:
+      rule: fixed
+      time: 2021-03-30T00:00:00.000Z
+
+    introspection: no-autofill
+    maxSplits: 4
+
+    defaultSelectedMeasures: [ "num_referrals" ]
+    defaultPinnedDimensions: [ "search_engine" ]
+
+    dimensions:
+      - name: time
+        title: Time
+        formula: $time
+        kind: time
+        granularities: [ 'P1D', 'P1W', 'P1M', 'P3M', 'P1Y' ]
+
+      - name: search_engine
+        title: Search Engine
+        description: Search engine that referred pageview -- e.g., DuckDuckGo
+        formula: $search_engine
+
+      - name: facets_group
+        title: Facets
+        dimensions:
+          - name: country
+            title: Country
+            description: Country of reader
+            formula: $country
+          - name: language
+            title: Language
+            description: Wikipedia language -- e.g., en for English Wikipedia
+            formula: $language
+          - name: os
+            title: OS
+            description: Reader operating system -- e.g., Android
+            formula: $os
+          - name: browser
+            title: Browser
+            description: Reader web browser -- e.g., Firefox
+            formula: $browser
+
+    measures:
+      - name: num_referrals
+        title: Total Referrals
+        formula: $main.sum($referrals)
+
+      - name: count
+        title: Records count
+        formula: $main.count()
+
+customization:
+  urlShortener: |
+    return request.get('http://tinyurl.com/api-create.php?url=' + encodeURIComponent(url))
