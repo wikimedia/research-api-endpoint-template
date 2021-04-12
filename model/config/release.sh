@@ -28,7 +28,6 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${REPO_LBL}/model/config/* ${ETC_PATH}
-# TODO: fix this to be more elegant (one directory or not necessary because run as package)
 cp ${TMP_PATH}/${REPO_LBL}/model/wsgi.py ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/flask_config.yaml ${ETC_PATH}
 cp ${ETC_PATH}/model.nginx /etc/nginx/sites-available/model

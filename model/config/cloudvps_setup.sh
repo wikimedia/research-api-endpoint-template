@@ -5,7 +5,7 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-MODEL_WGET='https://ndownloader.figshare.com/files/25742033'  # model binary -- ndownloader.figshare is a good host
+MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/region_groundtruth_2021_03_01_expanded.tsv.bz2'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -45,16 +45,8 @@ echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-# If UI included, consider the following for managing JS dependencies:
-# echo "Installing front-end resources..."
-# mkdir -p ${SRV_PATH}/resources
-# cd ${TMP_PATH}
-# npm install bower
-# cd ${SRV_PATH}/resources
-# ${TMP_PATH}/node_modules/bower/bin/bower install --allow-root ${TMP_PATH}/recommendation-api/recommendation/web/static/bower.json
-
 echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
+cd ${TMP_PATH}
 wget -O region_groundtruth.json.bz2 ${MODEL_WGET}
 mv region_groundtruth.json.bz2 ${ETC_PATH}/resources
 
