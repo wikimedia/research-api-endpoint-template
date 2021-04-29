@@ -8,8 +8,7 @@ dataCubes:
     timeAttribute: time
 
     refreshRule:
-      rule: fixed
-      time: 2021-03-30T00:00:00.000Z
+      rule: realtime
 
     introspection: no-autofill
     maxSplits: 4
@@ -39,24 +38,20 @@ dataCubes:
           - name: language
             title: Language
             description: Wikipedia language -- e.g., en for English Wikipedia
-            formula: $language
+            formula: $lang
           - name: os
-            title: OS
+            title: OS Family
             description: Reader operating system -- e.g., Android
-            formula: $os
+            formula: $os_family
           - name: browser
-            title: Browser
+            title: Browser Family
             description: Reader web browser -- e.g., Firefox
-            formula: $browser
+            formula: $browser_family
 
     measures:
       - name: num_referrals
         title: Total Referrals
         formula: $main.sum($referrals)
-
-      - name: count
-        title: Records count
-        formula: $main.count()
 
 customization:
   urlShortener: |
