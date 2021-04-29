@@ -51,7 +51,7 @@ dataCubes:
     measures:
       - name: num_referrals
         title: Total Referrals
-        formula: $main.sum($referrals)
+        formula: $main.sum($num_referrals)
 
 customization:
   urlShortener: |
