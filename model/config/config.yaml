@@ -13,6 +13,7 @@ dataCubes:
     introspection: no-autofill
     maxSplits: 4
 
+    defaultDuration: P1M
     defaultSelectedMeasures: [ "num_referrals" ]
     defaultPinnedDimensions: [ "search_engine" ]
 
