@@ -2,5 +2,4 @@ Flask==1.1.2
 Flask-Cors==3.0.8
 mwapi==0.5.1
 PyYAML==5.1.2
-sqlitedict==1.7.0
 uWSGI==2.0.19.1
