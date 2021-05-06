@@ -6,7 +6,6 @@ import re
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-from sqlitedict import SqliteDict
 import mwapi
 import yaml
 
@@ -20,7 +19,8 @@ app.config.update(
 
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
-GROUNDTRUTH = SqliteDict(os.path.join(__dir__, 'resources/groundtruth.sqlite'), autocommit=False)
+#GROUNDTRUTH = SqliteDict(os.path.join(__dir__, 'resources/groundtruth.sqlite'), autocommit=False)
+GROUNDTRUTH = {}
 REGION_TO_AGGS = {}
 IDX_TO_COUNTRY = {}
 COUNTRY_TO_IDX = {}
@@ -48,7 +48,10 @@ def get_regions():
 def get_groundtruth(qid):
     """Get fastText model predictions for an input feature string."""
     if qid in GROUNDTRUTH:
-        return [IDX_TO_COUNTRY[idx] for idx in GROUNDTRUTH[qid]]
+        if type(GROUNDTRUTH[qid]) == tuple:
+            return [IDX_TO_COUNTRY[idx] for idx in GROUNDTRUTH[qid]]
+        else:
+            return [IDX_TO_COUNTRY[GROUNDTRUTH[qid]]]
     else:
         return []
 
@@ -128,11 +131,14 @@ def load_data():
                         COUNTRY_TO_IDX[r] = idx
                         IDX_TO_COUNTRY[idx] = r
                     region_idcs.append(idx)
-                GROUNDTRUTH[item] = tuple(region_idcs)
-            if i % 500000 == 0:
-                GROUNDTRUTH.commit()
-                print(f"Committed {i}")
-    GROUNDTRUTH.commit()
+                if len(region_idcs) == 1:
+                    GROUNDTRUTH[item] = region_idcs[0]
+                else:
+                    GROUNDTRUTH[item] = tuple(region_idcs)
+#            if i % 500000 == 0:
+#                GROUNDTRUTH.commit()
+#                print(f"Committed {i}")
+#    GROUNDTRUTH.commit()
     print("{0} QIDs in groundtruth for {1} regions".format(len(GROUNDTRUTH), len(COUNTRY_TO_IDX)))
 
 def load_region_map():
