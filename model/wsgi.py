@@ -6,6 +6,7 @@ import re
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from sqlitedict import SqliteDict
 import mwapi
 import yaml
 
@@ -19,7 +20,7 @@ app.config.update(
 
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
-GROUNDTRUTH = {}
+GROUNDTRUTH = SqliteDict('./groundtruth.sqlite', autocommit=False)
 REGION_TO_AGGS = {}
 IDX_TO_COUNTRY = {}
 COUNTRY_TO_IDX = {}
@@ -114,7 +115,7 @@ def load_data():
     with bz2.open(os.path.join(__dir__, 'resources/region_groundtruth.tsv.bz2'), 'rt') as fin:
         tsvreader = csv.reader(fin, delimiter='\t')
         assert next(tsvreader) == ['item', 'countries']
-        for line in tsvreader:
+        for i, line in enumerate(tsvreader, start=1):
             item = line[0]
             regions = line[1].split('|')
             if regions:
@@ -128,6 +129,10 @@ def load_data():
                         IDX_TO_COUNTRY[idx] = r
                     region_idcs.append(idx)
                 GROUNDTRUTH[item] = tuple(region_idcs)
+            if i % 500000 == 0:
+                GROUNDTRUTH.commit()
+                print(f"Committed {i}")
+    GROUNDTRUTH.commit()
     print("{0} QIDs in groundtruth for {1} regions".format(len(GROUNDTRUTH), len(COUNTRY_TO_IDX)))
 
 def load_region_map():
