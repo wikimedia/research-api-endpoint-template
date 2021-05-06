@@ -20,7 +20,7 @@ app.config.update(
 
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
-GROUNDTRUTH = SqliteDict('./groundtruth.sqlite', autocommit=False)
+GROUNDTRUTH = SqliteDict(os.path.join(__dir__, 'resources/groundtruth.sqlite'), autocommit=False)
 REGION_TO_AGGS = {}
 IDX_TO_COUNTRY = {}
 COUNTRY_TO_IDX = {}
