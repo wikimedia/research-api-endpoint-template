@@ -80,7 +80,7 @@ def misalignment_article():
     return jsonify({'quality':quality, 'demand':demand, 'misalignment':misalignment})
 
 @app.route('/api/v1/quality-article', methods=['GET'])
-def misalignment_article():
+def quality_article():
     lang, title, error = validate_api_args()
     if error:
         return jsonify({'error':error})
