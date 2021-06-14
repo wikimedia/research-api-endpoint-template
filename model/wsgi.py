@@ -79,6 +79,25 @@ def misalignment_article():
 
     return jsonify({'quality':quality, 'demand':demand, 'misalignment':misalignment})
 
+@app.route('/api/v1/quality-article', methods=['GET'])
+def misalignment_article():
+    lang, title, error = validate_api_args()
+    if error:
+        return jsonify({'error':error})
+    quality = get_quality(lang, title)
+
+    return jsonify({'quality':quality})
+
+@app.route('/api/v1/demand-article', methods=['GET'])
+def demand_article():
+    lang, title, error = validate_api_args()
+    if error:
+        return jsonify({'error': error})
+    last_month = datetime.now().replace(day=1) - timedelta(1)
+    demand = get_demand(lang, title, last_month.year, last_month.month)
+
+    return jsonify({'demand': demand})
+
 def get_demand(lang, title, year=2021, month=4):
     """Gather set of up to `limit` outlinks for an article."""
     p = PageviewsClient(user_agent=app.config['CUSTOM_UA'])
