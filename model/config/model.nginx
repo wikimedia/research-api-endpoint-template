@@ -3,7 +3,8 @@ log_format private '[$time_local] "$request" $status $body_bytes_sent "$http_ref
 
 server {
     listen 80;  # default port 80; must match backend port selected when creating web proxy on Horizon
-    server_name wiki-search-referrals.wmcloud.org turnilo-public.wmcloud.org;
+    # server_name wiki-search-referrals.wmcloud.org turnilo-public.wmcloud.org;
+    server_name public-turnilo-testing.wmcloud.org;
     if ( $host != $server_name ) {
         return 302 $scheme://$server_name$request_uri;
     }
