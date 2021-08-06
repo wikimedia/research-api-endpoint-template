@@ -2,9 +2,9 @@ dataCubes:
   - name: referrals
     title: Search Engine Referrals
     description: |
-      (Synthetic) Data on search engine referrals to Wikipedia. Split by country, language, OS, and browser.
+      Data on search engine referrals to Wikipedia. Split by country, language, OS, and browser.
     clusterName: native
-    source: data.json
+    source: data.tsv
     timeAttribute: time
 
     refreshRule:

@@ -5,7 +5,7 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='turnilo'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/wikimedia/research-api-endpoint-template.git'  # for `git clone`
-DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/referrals/data.json'  # data for Turnilo
+DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/referrals/data.tsv'  # data for Turnilo
 
 ETC_PATH="/etc/${APP_LBL}"  # system/app config info
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
@@ -30,9 +30,9 @@ mkdir -p ${ETC_PATH}
 git clone --branch turnilo ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
-#wget -O data.json ${DATA_WGET}
-#mv data.json ${ETC_PATH}
+cd ${TMP_PATH}
+wget -O data.tsv ${DATA_WGET}
+mv data.tsv ${ETC_PATH}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
