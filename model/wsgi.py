@@ -1,10 +1,10 @@
 # Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
 import os
 
-import fasttext
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import mwapi
+from sqlitedict import SqliteDict
 import yaml
 
 app = Flask(__name__)
@@ -19,46 +19,95 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 # fast-text model for making predictions
-FT_MODEL = fasttext.load_model(os.path.join(__dir__, 'resources/model.bin'))
+DB = SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite'))
+NON_GENDERED_LBL = 'N/A'
+GENDER_LABELS = {
+    'Q48270':'non-binary',
+    'Q6581072':'female',
+    'Q27679684':'transfeminine',
+    'Q15145778':'cisgender male',
+    'Q859614':'bigender',
+    'Q48279':'third gender',
+    'Q1289754':'neutrois',
+    'Q3277905':'māhū',
+    'Q179294':'eunuch',
+    'Q189125':'transgender person',
+    'Q2449503':'transgender male',
+    'Q1097630':'intersex',
+    'Q505371':'agender',
+    'Q27679766':'transmasculine',
+    'Q15145779':'cisgender female',
+    'Q18116794':'genderfluid',
+    'Q207959':'androgynous',
+    'Q6581097':'male',
+    'Q301702':'two-spiriit',
+    'Q1052281':'transgender female',
+    'Q93954933':'demiboy',
+    'Q12964198':'genderqueer',
+    'Q52261234':'neutral sex'
+}
 
-@app.route('/api/v1/topic', methods=['GET'])
-def get_topics():
+@app.route('/api/v1/summary', methods=['GET'])
+def get_summary():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    lang, page_title, threshold, debug, error = validate_api_args()
+    lang, page_title, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
         outlinks = get_outlinks(page_title, lang)
-        topics = get_predictions(features_str=' '.join(outlinks), model=FT_MODEL, threshold=threshold, debug=debug)
+        num_outlinks = len(outlinks)
+        gender_dist = get_distribution(outlinks)
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  'results': [{'topic': t[0], 'score': t[1]} for t in topics]
+                  'num_outlinks': num_outlinks,
+                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_outlinks} for g in gender_dist]
                   }
-        if debug:
-            result['outlinks'] = sorted(outlinks)
         return jsonify(result)
 
-def get_predictions(features_str, model, threshold=0.5, debug=False):
+@app.route('/api/v1/details', methods=['GET'])
+def get_details():
+    """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
+    lang, page_title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'Error': error})
+    else:
+        outlinks = get_outlinks(page_title, lang, verbose=True)
+        num_outlinks = len(outlinks)
+        gender_by_title = add_gender_data(outlinks)
+        gender_dist = get_distribution(set(outlinks.values()))
+        result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
+                  'num_outlinks': num_outlinks,
+                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_outlinks} for g in gender_dist],
+                  'details': [{'title':g[0], 'gender':g[1]} for g in gender_by_title]
+                  }
+        return jsonify(result)
+
+def add_gender_data(outlinks):
+    title_gender = []
+    for title, qid in outlinks.items():
+        try:
+            g = DB[qid]  # get gender QID value
+            g = GENDER_LABELS.get(g, g)  # convert value to label
+            title_gender.append((title, g))
+        except KeyError:
+            title_gender.append((title, NON_GENDERED_LBL))
+
+    return title_gender
+
+def get_distribution(outlinks):
     """Get fastText model predictions for an input feature string."""
-    lbls, scores = model.predict(features_str, k=-1)
-    results = {l:s for l,s in zip(lbls, scores)}
-    if debug:
-        print(results)
-    sorted_res = [(l.replace("__label__", ""), results[l]) for l in sorted(results, key=results.get, reverse=True)]
-    above_threshold = [r for r in sorted_res if r[1] >= threshold]
-    lbls_above_threshold = []
-    if above_threshold:
-        for res in above_threshold:
-            if debug:
-                print('{0}: {1:.3f}'.format(*res))
-            if res[1] > threshold:
-                lbls_above_threshold.append(res[0])
-    elif debug:
-        print("No label above {0} threshold.".format(threshold))
-        print("Top result: {0} ({1:.3f}) -- {2}".format(sorted_res[0][0], sorted_res[0][1], sorted_res[0][2]))
+    gender_dist = {}
+    for qid in outlinks:
+        try:
+            g = DB[qid]  # get gender QID value
+            g = GENDER_LABELS.get(g, g)  # convert value to label
+            gender_dist[g] = gender_dist.get(g, 0) + 1
+        except KeyError:
+            gender_dist[NON_GENDERED_LBL] = gender_dist.get(NON_GENDERED_LBL, 0) + 1
 
-    return above_threshold
+    gender_dist = [(lbl, gender_dist[lbl]) for lbl in sorted(gender_dist, key=gender_dist.get, reverse=True)]
+    return gender_dist
 
-def get_outlinks(title, lang, limit=1000, session=None):
+def get_outlinks(title, lang, limit=1500, session=None, verbose=False):
     """Gather set of up to `limit` outlinks for an article."""
     if session is None:
         session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
@@ -78,16 +127,32 @@ def get_outlinks(title, lang, limit=1000, session=None):
         continuation=True
     )
     try:
-        outlink_qids = set()
-        for r in result:
-            for outlink in r['query']['pages']:
-                if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
-                    qid = outlink.get('pageprops', {}).get('wikibase_item', None)
-                    if qid is not None:
-                        outlink_qids.add(qid)
-            if len(outlink_qids) > limit:
-                break
-        return outlink_qids
+        if verbose:
+            outlink_qids = {}
+            redirects = {}
+            for rd in result['query'].get('redirects', []):
+                redirects[rd['to']] = redirects[rd['from']]
+            for r in result:
+                for outlink in r['query']['pages']:
+                    if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
+                        qid = outlink.get('pageprops', {}).get('wikibase_item', None)
+                        title = redirects.get(outlink['title'], outlink['title']).lower()
+                        if qid is not None:
+                            outlink_qids[title] = qid
+                if len(outlink_qids) > limit:
+                    break
+            return outlink_qids
+        else:
+            outlink_qids = set()
+            for r in result:
+                for outlink in r['query']['pages']:
+                    if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
+                        qid = outlink.get('pageprops', {}).get('wikibase_item', None)
+                        if qid is not None:
+                            outlink_qids.add(qid)
+                if len(outlink_qids) > limit:
+                    break
+            return outlink_qids
     except Exception:
         return None
 
@@ -116,7 +181,6 @@ def validate_api_args():
     error = None
     lang = None
     page_title = None
-    threshold = 0.5
     if request.args.get('title') and request.args.get('lang'):
         lang = request.args['lang']
         page_title = get_canonical_page_title(request.args['title'], lang)
@@ -129,18 +193,7 @@ def validate_api_args():
     else:
         error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
 
-    if 'threshold' in request.args:
-        try:
-            threshold = float(request.args['threshold'])
-        except ValueError:
-            threshold = "Error: threshold value provided not a float: {0}".format(request.args['threshold'])
-
-    debug = False
-    if 'debug' in request.args:
-        debug = True
-        threshold = 0
-
-    return lang, page_title, threshold, debug, error
+    return lang, page_title, error
 
 application = app
 
