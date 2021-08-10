@@ -131,9 +131,9 @@ def get_outlinks(title, lang, limit=1500, session=None, verbose=False):
         if verbose:
             outlink_qids = {}
             redirects = {}
-            for rd in result['query'].get('redirects', []):
-                redirects[rd['to']] = rd['from']
             for r in result:
+                for rd in result['query'].get('redirects', []):
+                    redirects[rd['to']] = rd['from']
                 for outlink in r['query']['pages']:
                     if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
                         qid = outlink.get('pageprops', {}).get('wikibase_item', None)
