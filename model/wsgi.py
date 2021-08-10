@@ -132,7 +132,7 @@ def get_outlinks(title, lang, limit=1500, session=None, verbose=False):
             outlink_qids = {}
             redirects = {}
             for rd in result['query'].get('redirects', []):
-                redirects[rd['to']] = redirects[rd['from']]
+                redirects[rd['to']] = rd['from']
             for r in result:
                 for outlink in r['query']['pages']:
                     if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
