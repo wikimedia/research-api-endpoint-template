@@ -46,6 +46,7 @@ GENDER_LABELS = {
     'Q12964198':'genderqueer',
     'Q52261234':'neutral sex'
 }
+print(f"DB loaded -- e.g., Q42: {GENDER_LABELS.get(DB['Q42'])}")
 
 @app.route('/api/v1/summary', methods=['GET'])
 def get_summary():
@@ -56,6 +57,7 @@ def get_summary():
     else:
         outlinks = get_outlinks(page_title, lang)
         num_outlinks = len(outlinks)
+        print(f"{num_outlinks} outlinks found.")
         gender_dist = get_distribution(outlinks)
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
                   'num_outlinks': num_outlinks,
@@ -170,7 +172,6 @@ def get_canonical_page_title(title, lang, session=None):
         format='json',
         formatversion=2
     )
-    print(result)
     if 'missing' in result['query']['pages'][0]:
         return None
     else:
