@@ -19,7 +19,6 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 # fast-text model for making predictions
-DB = SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite'))
 NON_GENDERED_LBL = 'N/A'
 GENDER_LABELS = {
     'Q48270':'non-binary',
@@ -46,7 +45,6 @@ GENDER_LABELS = {
     'Q12964198':'genderqueer',
     'Q52261234':'neutral sex'
 }
-print(f"DB loaded -- e.g., Q42: {GENDER_LABELS.get(DB['Q42'])}")
 
 @app.route('/api/v1/summary', methods=['GET'])
 def get_summary():
@@ -57,7 +55,6 @@ def get_summary():
     else:
         outlinks = get_outlinks(page_title, lang)
         num_outlinks = len(outlinks)
-        print(f"{num_outlinks} outlinks found.")
         gender_dist = get_distribution(outlinks)
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
                   'num_outlinks': num_outlinks,
@@ -85,26 +82,28 @@ def get_details():
 
 def add_gender_data(outlinks):
     title_gender = []
-    for title, qid in outlinks.items():
-        try:
-            g = DB[qid]  # get gender QID value
-            g = GENDER_LABELS.get(g, g)  # convert value to label
-            title_gender.append((title, g))
-        except KeyError:
-            title_gender.append((title, NON_GENDERED_LBL))
+    with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
+        for title, qid in outlinks.items():
+            try:
+                g = gender_db[qid]  # get gender QID value
+                g = GENDER_LABELS.get(g, g)  # convert value to label
+                title_gender.append((title, g))
+            except KeyError:
+                title_gender.append((title, NON_GENDERED_LBL))
 
     return title_gender
 
 def get_distribution(outlinks):
     """Get fastText model predictions for an input feature string."""
     gender_dist = {}
-    for qid in outlinks:
-        try:
-            g = DB[qid]  # get gender QID value
-            g = GENDER_LABELS.get(g, g)  # convert value to label
-            gender_dist[g] = gender_dist.get(g, 0) + 1
-        except KeyError:
-            gender_dist[NON_GENDERED_LBL] = gender_dist.get(NON_GENDERED_LBL, 0) + 1
+    with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
+        for qid in outlinks:
+            try:
+                g = gender_db[qid]  # get gender QID value
+                g = GENDER_LABELS.get(g, g)  # convert value to label
+                gender_dist[g] = gender_dist.get(g, 0) + 1
+            except KeyError:
+                gender_dist[NON_GENDERED_LBL] = gender_dist.get(NON_GENDERED_LBL, 0) + 1
 
     gender_dist = [(lbl, gender_dist[lbl]) for lbl in sorted(gender_dist, key=gender_dist.get, reverse=True)]
     return gender_dist
