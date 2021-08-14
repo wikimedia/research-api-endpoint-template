@@ -49,13 +49,13 @@ GENDER_LABELS = {
 @app.route('/api/v1/summary', methods=['GET'])
 def get_summary():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    lang, page_title, error = validate_api_args()
+    lang, page_title, gendered_only, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
         outlinks = get_outlinks(page_title, lang)
-        num_outlinks = len(outlinks)
-        gender_dist = get_distribution(outlinks)
+        gender_dist = get_distribution(outlinks, gendered_only)
+        num_outlinks = sum([g[1] for g in gender_dist])
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
                   'num_outlinks': num_outlinks,
                   'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_outlinks} for g in gender_dist]
@@ -65,14 +65,14 @@ def get_summary():
 @app.route('/api/v1/details', methods=['GET'])
 def get_details():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    lang, page_title, error = validate_api_args()
+    lang, page_title, gendered_only, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
         outlinks = get_outlinks(page_title, lang, verbose=True)
-        num_outlinks = len(outlinks)
-        gender_by_title = add_gender_data(outlinks)
-        gender_dist = get_distribution(set(outlinks.values()))
+        gender_by_title = add_gender_data(outlinks, gendered_only)
+        gender_dist = get_distribution(set(outlinks.values()), gendered_only)
+        num_outlinks = sum([g[1] for g in gender_dist])
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
                   'num_outlinks': num_outlinks,
                   'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_outlinks} for g in gender_dist],
@@ -80,7 +80,7 @@ def get_details():
                   }
         return jsonify(result)
 
-def add_gender_data(outlinks):
+def add_gender_data(outlinks, gendered_only=True):
     title_gender = []
     with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
         for title, qid in outlinks.items():
@@ -89,11 +89,12 @@ def add_gender_data(outlinks):
                 g = GENDER_LABELS.get(g, g)  # convert value to label
                 title_gender.append((title, g))
             except KeyError:
-                title_gender.append((title, NON_GENDERED_LBL))
+                if not gendered_only:
+                    title_gender.append((title, NON_GENDERED_LBL))
 
     return title_gender
 
-def get_distribution(outlinks):
+def get_distribution(outlinks, gendered_only=True):
     """Get fastText model predictions for an input feature string."""
     gender_dist = {}
     with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
@@ -103,7 +104,8 @@ def get_distribution(outlinks):
                 g = GENDER_LABELS.get(g, g)  # convert value to label
                 gender_dist[g] = gender_dist.get(g, 0) + 1
             except KeyError:
-                gender_dist[NON_GENDERED_LBL] = gender_dist.get(NON_GENDERED_LBL, 0) + 1
+                if not gendered_only:
+                    gender_dist[NON_GENDERED_LBL] = gender_dist.get(NON_GENDERED_LBL, 0) + 1
 
     gender_dist = [(lbl, gender_dist[lbl]) for lbl in sorted(gender_dist, key=gender_dist.get, reverse=True)]
     return gender_dist
@@ -193,7 +195,11 @@ def validate_api_args():
     else:
         error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
 
-    return lang, page_title, error
+    gendered_only = False
+    if request.args.get('genderonly'):
+        gendered_only = True
+
+    return lang, page_title, gendered_only, error
 
 application = app
 
