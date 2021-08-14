@@ -195,9 +195,9 @@ def validate_api_args():
     else:
         error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
 
-    gendered_only = False
-    if request.args.get('genderonly'):
-        gendered_only = True
+    gendered_only = True
+    if 'all' in request.args:
+        gendered_only = False
 
     return lang, page_title, gendered_only, error
 
