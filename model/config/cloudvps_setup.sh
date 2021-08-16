@@ -5,7 +5,7 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/gender-data/gender_all_2021_07.sqlite'
+MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/gender-data/gender_all_latest.sqlite'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
