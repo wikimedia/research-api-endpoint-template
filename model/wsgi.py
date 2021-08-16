@@ -139,9 +139,12 @@ def get_outlinks(title, lang, limit=1500, session=None, verbose=False):
                 for outlink in r['query']['pages']:
                     if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
                         qid = outlink.get('pageprops', {}).get('wikibase_item', None)
-                        title = redirects.get(outlink['title'], outlink['title']).lower()
                         if qid is not None:
-                            outlink_qids[title] = qid
+                            title = outlink['title']
+                            outlink_qids[title.lower()] = qid
+                            # if redirect, add in both forms because the link might be present in both forms too
+                            if title in redirects:
+                                outlink_qids[redirects.get(title).lower()] = qid
                 if len(outlink_qids) > limit:
                     break
             return outlink_qids
