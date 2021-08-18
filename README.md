@@ -1,6 +1,6 @@
 # Public Turnilo Dashboard for Referrer Data
 
-This repo includes the config and scripts to stand up a basic public Turnilo instance on Cloud VPS.
+This repo includes the config and scripts to stand up a basic public Turnilo instance on Cloud VPS. For details about the data, see: https://wikitech.wikimedia.org/wiki/Analytics/Data_Lake/Traffic/referrer_daily/Dashboard
 
 The basic components of the API are as follows:
 * [systemd](https://en.wikipedia.org/wiki/Systemd): Linux service manager that we configure to start up nginx (listen for user requests) and turnilo (dashboard; node service that listens for user requests). Controlled via `systemctl` utility.
