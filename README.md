@@ -40,7 +40,7 @@ Various commands can be checked to see why your API isn't working:
 You will probably have to change the following components:
 * `model/wsgi.py`: this is the file with your model / Flask so you'll have to update it depending your desired input URL parameters and output JSON result.
 * `flask_config.yaml`: any Flask config variables that need to be set.
-* `model/config/cloudvps_setup.sh`: you likely will have to change some of the parameters at the top of the file and how you download any larger data/model files. Likewise, `model/config/release.sh` will need to be updated in a similar manner.
+* `model/config/cloudvps_setup.sh`: you likely will have to change some of the parameters at the top of the file and how you download any larger data/model files. Likewise, `model/config/release.sh` and `model/config/new_data.sh` will need to be updated in a similar manner.
 * `model/config/model.nginx`: server name will need to be updated to your instance / proxy (set in Horizon)
 * `model/config/uwsgi.ini`: potentially update number of processes and virtualenv location
 * `model/config/model.service`: potentially update description, though this won't affect the API
@@ -48,7 +48,7 @@ You will probably have to change the following components:
 * Currently `setup.py` is not used, but it would need to be updated in a more complete package system.
 
 ### Managing large files
-A common dependency for these APIs is some sort of trained machine-learning model. The following scenarios assume the file originates on the [stat100x machines](https://wikitech.wikimedia.org/wiki/Analytics/Systems/Clients) and can be made public. If the file is a research dataset that would be valuable as a public resource, doing a formal [data release](https://wikitech.wikimedia.org/wiki/Data_releases) and uploading to Figshare or a related site is likely the best solution.
+A common dependency for these APIs is some sort of trained machine-learning model or database. The following scenarios assume the file originates on the [stat100x machines](https://wikitech.wikimedia.org/wiki/Analytics/Systems/Clients) and can be made public. If the file is a research dataset that would be valuable as a public resource, doing a formal [data release](https://wikitech.wikimedia.org/wiki/Data_releases) and uploading to Figshare or a related site is likely the best solution.
 * Small (e.g., <1GB), temporary: probably easiest to just scp these files to your local laptop and then back up to the Cloud VPS instance.
 * Large (e.g., <20GB), temporary: use the [web publication](https://wikitech.wikimedia.org/wiki/Analytics/Web_publication) process to make available in the one-off folder and then `wget` the file to your Cloud VPS instance. You can then remove it from the web publication folder.
 * Really large: talk to analytics.
