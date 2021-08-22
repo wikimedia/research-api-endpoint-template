@@ -46,44 +46,61 @@ GENDER_LABELS = {
     'Q52261234':'neutral sex'
 }
 
+@app.route('/api/v1/outlinks-summary', methods=['GET'])
 @app.route('/api/v1/summary', methods=['GET'])
-def get_summary():
-    """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
+def get_outlinks_summary():
+    return get_summary('outlinks')
+
+@app.route('/api/v1/outlinks-details', methods=['GET'])
+@app.route('/api/v1/details', methods=['GET'])
+def get_outlinks_details():
+    return get_details('outlinks')
+
+@app.route('/api/v1/inlinks-summary', methods=['GET'])
+def get_inlinks_summary():
+    return get_summary('inlinks')
+
+@app.route('/api/v1/inlinks-details', methods=['GET'])
+def get_inlinks_details():
+    return get_details('inlinks')
+
+
+def get_summary(linktype='outlinks'):
+    """Get gender distribution summary (aggregate stats) for links to/from an article."""
     lang, page_title, gendered_only, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
-        outlinks = get_outlinks(page_title, lang)
-        gender_dist = get_distribution(outlinks, gendered_only)
-        num_outlinks = sum([g[1] for g in gender_dist])
+        links = get_links(page_title, lang, linktype=linktype)
+        gender_dist = get_distribution(links, gendered_only)
+        num_links = sum([g[1] for g in gender_dist])
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  'num_outlinks': num_outlinks,
-                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_outlinks} for g in gender_dist]
+                  f'num_{linktype}': num_links,
+                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_links} for g in gender_dist]
                   }
         return jsonify(result)
 
-@app.route('/api/v1/details', methods=['GET'])
-def get_details():
-    """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
+def get_details(linktype='outlinks'):
+    """Get gender distribution details (individual links and aggregate stats) for links to/from an article."""
     lang, page_title, gendered_only, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
-        outlinks = get_outlinks(page_title, lang, verbose=True)
-        gender_by_title = add_gender_data(outlinks, gendered_only)
-        gender_dist = get_distribution(set(outlinks.values()), gendered_only)
-        num_outlinks = sum([g[1] for g in gender_dist])
+        links = get_links(page_title, lang, linktype=linktype, verbose=True)
+        gender_by_title = add_gender_data(links, gendered_only)
+        gender_dist = get_distribution(set(links.values()), gendered_only)
+        num_links = sum([g[1] for g in gender_dist])
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  'num_outlinks': num_outlinks,
-                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_outlinks} for g in gender_dist],
+                  f'num_{linktype}': num_links,
+                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_links} for g in gender_dist],
                   'details': [{'title':g[0], 'gender':g[1]} for g in gender_by_title]
                   }
         return jsonify(result)
 
-def add_gender_data(outlinks, gendered_only=True):
+def add_gender_data(links, gendered_only=True):
     title_gender = []
     with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
-        for title, qid in outlinks.items():
+        for title, qid in links.items():
             try:
                 g = gender_db[qid]  # get gender QID value
                 g = GENDER_LABELS.get(g, g)  # convert value to label
@@ -94,11 +111,11 @@ def add_gender_data(outlinks, gendered_only=True):
 
     return title_gender
 
-def get_distribution(outlinks, gendered_only=True):
+def get_distribution(links, gendered_only=True):
     """Get fastText model predictions for an input feature string."""
     gender_dist = {}
     with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
-        for qid in outlinks:
+        for qid in links:
             try:
                 g = gender_db[qid]  # get gender QID value
                 g = GENDER_LABELS.get(g, g)  # convert value to label
@@ -110,57 +127,74 @@ def get_distribution(outlinks, gendered_only=True):
     gender_dist = [(lbl, gender_dist[lbl]) for lbl in sorted(gender_dist, key=gender_dist.get, reverse=True)]
     return gender_dist
 
-def get_outlinks(title, lang, limit=1500, session=None, verbose=False):
-    """Gather set of up to `limit` outlinks for an article."""
+def get_links(title, lang, linktype='outlinks', limit=1500, session=None, verbose=False):
+    """Gather set of up to `limit` links for an article."""
     if session is None:
         session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
 
-    # generate list of all outlinks (to namespace 0) from the article and their associated Wikidata IDs
-    result = session.get(
-        action="query",
-        generator="links",
-        titles=title,
-        redirects='',
-        prop='pageprops',
-        ppprop='wikibase_item',
-        gplnamespace=0,  # this actually doesn't seem to work :/
-        gpllimit=50,
-        format='json',
-        formatversion=2,
-        continuation=True
-    )
+    # generate list of all out/inlinks (to namespace 0) from the article and their associated Wikidata IDs
+    if linktype == 'outlinks':
+        result = session.get(
+            action="query",
+            generator="links",
+            titles=title,
+            redirects='',
+            prop='pageprops',
+            ppprop='wikibase_item',
+            gplnamespace=0,  # this actually doesn't seem to work :/
+            gpllimit=50,
+            format='json',
+            formatversion=2,
+            continuation=True
+        )
+    elif linktype == 'inlinks':
+        result = session.get(
+            action="query",
+            generator="backlinks",
+            gbltitle=title,
+            redirects='',
+            prop='pageprops',
+            ppprop='wikibase_item',
+            gblnamespace=0,  # this actually doesn't seem to work :/
+            gbllimit=50,
+            format='json',
+            formatversion=2,
+            continuation=True
+        )
+    else:
+        return {}
     try:
         if verbose:
-            outlink_qids = {}
+            link_qids = {}
             redirects = {}
             for r in result:
                 for rd in r['query'].get('redirects', []):
                     redirects[rd['to']] = rd['from']
-                for outlink in r['query']['pages']:
-                    if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
-                        qid = outlink.get('pageprops', {}).get('wikibase_item', None)
+                for link in r['query']['pages']:
+                    if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
+                        qid = link.get('pageprops', {}).get('wikibase_item', None)
                         if qid is not None:
-                            title = outlink['title']
-                            outlink_qids[title.lower()] = qid
+                            title = link['title']
+                            link_qids[title.lower()] = qid
                             # if redirect, add in both forms because the link might be present in both forms too
                             if title in redirects:
-                                outlink_qids[redirects.get(title).lower()] = qid
-                if len(outlink_qids) > limit:
+                                link_qids[redirects.get(title).lower()] = qid
+                if len(link_qids) > limit:
                     break
-            return outlink_qids
+            return link_qids
         else:
-            outlink_qids = set()
+            link_qids = set()
             for r in result:
-                for outlink in r['query']['pages']:
-                    if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
-                        qid = outlink.get('pageprops', {}).get('wikibase_item', None)
+                for link in r['query']['pages']:
+                    if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
+                        qid = link.get('pageprops', {}).get('wikibase_item', None)
                         if qid is not None:
-                            outlink_qids.add(qid)
-                if len(outlink_qids) > limit:
+                            link_qids.add(qid)
+                if len(link_qids) > limit:
                     break
-            return outlink_qids
+            return link_qids
     except Exception:
-        return None
+        return {}
 
 def get_canonical_page_title(title, lang, session=None):
     """Resolve redirects / normalization -- used to verify that an input page_title exists"""
