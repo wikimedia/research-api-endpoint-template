@@ -58,8 +58,7 @@ def get_regions_articles():
         return jsonify(result)
 
 def qid_to_regions(qid, region=True, subcontinent=True, continent=True, global_ns=True):
-    qidr = {'qid': qid,
-            'regions': []}
+    regions = []
     for r in get_groundtruth(qid):
         result = {}
         if region:
@@ -70,8 +69,8 @@ def qid_to_regions(qid, region=True, subcontinent=True, continent=True, global_n
             result['continent'] = REGION_TO_AGGS[r]['continent']
         if global_ns:
             result['global_ns'] = REGION_TO_AGGS[r]['global_ns']
-        qidr['regions'].append(result)
-    return qidr
+        regions.append(result)
+    return regions
 
 def get_groundtruth(qid):
     """Get fastText model predictions for an input feature string."""
