@@ -156,12 +156,11 @@ def titles_to_qids(titles, lang, session=None):
     )
     # keep original titles in response
     rev_redirects = {}
-    encoded = {}
     for t in result['query'].get('normalized', []):
-        encoded[t['to']] = t['from']
+        rev_redirects[t['to']] = t['from']
     for t in result['query'].get('redirects', []):
-        if t['from'] in encoded:
-            rev_redirects[t['to']] = encoded[t['from']]
+        if t['from'] in rev_redirects:
+            rev_redirects[t['to']] = rev_redirects[t['from']]
         else:
             rev_redirects[t['to']] = t['from']
     qids = {}
