@@ -36,7 +36,8 @@ def get_regions_outlinks():
     else:
         result = []
         for title, qid in qids.items():
-            result.append({'title': title,
+            result.append({'qid':qid,
+                           'title': title,
                            'regions': qid_to_regions(qid, reg, sc, c, gns)})
         return jsonify(result)
 
@@ -50,8 +51,9 @@ def get_regions_articles():
         return jsonify({'Error': error})
     else:
         result = []
-        for qid in qids:
+        for title, qid in qids.items():
             result.append({'qid':qid,
+                           'title':title,
                            'regions':qid_to_regions(qid, reg, sc, c, gns)})
         return jsonify(result)
 
@@ -153,10 +155,20 @@ def titles_to_qids(titles, lang, session=None):
         format='json',
         formatversion=2
     )
-    qids = []
+    # keep original titles in response
+    rev_redirects = {}
+    encoded = {}
+    for t in result['query'].get('normalized', []):
+        encoded[t['to']] = t['from']
+    for t in result['query'].get('redirects', []):
+        if t['from'] in encoded:
+            rev_redirects[t['to']] = encoded[t['from']]
+        else:
+            rev_redirects[t['to']] = t['from']
+    qids = {}
     for r in result['query']['pages']:
         if r['pageprops'].get('wikibase_item'):
-            qids.append(r['pageprops']['wikibase_item'])
+            qids[rev_redirects.get(r['title'], r['title'])] = r['pageprops']['wikibase_item']
 
     return qids
 
@@ -186,10 +198,10 @@ def get_qids(links=False):
     error = None
     qids = None
     if 'qid' in request.args:
-        qids = []
+        qids = {}
         for qid in request.args['qid'].upper().split('|'):
             if validate_qid(qid):
-                qids.append(qid)
+                qids[qid] = qid  # weirdly redundant but title is the same as the QID and maintains consistency
         if not qids:
             error = "Error: poorly formatted 'qid' field. '{0}' does not match '^Q[0-9]+$'".format(request.args['qid'].upper())
     elif 'titles' in request.args and 'lang' in request.args:
