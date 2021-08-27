@@ -181,13 +181,13 @@ def get_region_types():
         sc = False
         c = False
         gns = False
-        if 'region' in request['regiontypes']:
+        if 'region' in request.args['regiontypes']:
             reg = True
-        if 'subcontinent' in request['regiontypes']:
+        if 'subcontinent' in request.args['regiontypes']:
             sc = True
-        if 'continent' in request['regiontypes']:
+        if 'continent' in request.args['regiontypes']:
             c = True
-        if 'global_ns' in request['regiontypes']:
+        if 'global_ns' in request.args['regiontypes']:
             gns = True
     return reg, sc, c, gns
 
