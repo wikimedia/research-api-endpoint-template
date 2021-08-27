@@ -29,32 +29,31 @@ WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', '
 @app.route('/api/v1/outlinks-regions', methods=['GET'])
 def get_regions_outlinks():
     """Get region(s) for all links within an article."""
-    reg, sc, c, gns = get_region_types()
-    qids, error = get_qids(links=True)
-    if error is not None:
-        return jsonify({'Error': error})
-    else:
-        result = []
-        for title, qid in qids.items():
-            result.append({'qid':qid,
-                           'title': title,
-                           'regions': qid_to_regions(qid, reg, sc, c, gns)})
-        return jsonify(result)
+    return get_regions(links=True)
 
 @app.route('/api/v1/articles-regions', methods=['GET'])
 @app.route('/api/v1/region', methods=['GET'])
 def get_regions_articles():
     """Get region(s) for 1-50 Wikidata items or articles."""
+    return get_regions(links=False)
+
+def get_regions(links=False):
+    """Get region(s) for 1-50 Wikidata items or articles."""
     reg, sc, c, gns = get_region_types()
-    qids, error = get_qids(links=False)
+    qids, error = get_qids(links=links)
+    geo_only = False
+    if 'geo_only' in request.args:
+        geo_only = True
     if error is not None:
         return jsonify({'Error': error})
     else:
         result = []
         for title, qid in qids.items():
-            result.append({'qid':qid,
-                           'title':title,
-                           'regions':qid_to_regions(qid, reg, sc, c, gns)})
+            regions = qid_to_regions(qid, reg, sc, c, gns)
+            if regions or not geo_only:
+                result.append({'qid': qid,
+                               'title': title,
+                               'regions': regions})
         return jsonify(result)
 
 def qid_to_regions(qid, region=True, subcontinent=True, continent=True, global_ns=True):
