@@ -43,6 +43,9 @@ def get_topics():
                 results.update(occ_types)
             else:
                 unmapped.append(occ)
+        if unmapped:
+            qid_to_lbl = get_labels(unmapped, 'en')
+            unmapped = [{'qid':q, 'lbl':qid_to_lbl[q]} for q in unmapped]
         result = {'qid': qid,
                   'results': [{'qid':r, 'lbl':PERSON_TAXONOMY[r]} for r in results],
                   'unmapped': unmapped
@@ -124,6 +127,29 @@ def title_to_qid(title, lang):
     )
 
     return result['query']['pages'][0]['pageprops'].get('wikibase_item')
+
+def get_labels(qids, lang='en'):
+    # https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q1|Q42&props=labels&languages=en&format=json&formatversion=2
+    session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+
+    result = session.get(
+        action="wbgetentities",
+        ids="|".join(qids),
+        props='labels',
+        languages=lang,
+        languagefallback=True,
+        format='json',
+        formatversion=2
+    )
+
+    qid_to_lbl = {}
+    for q in qids:
+        try:
+            qid_to_lbl[q] = result['entities'][q]['labels'][lang]['value']
+        except KeyError:
+            qid_to_lbl[q] = q
+
+    return qid_to_lbl
 
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
