@@ -8,8 +8,8 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 # model binary / data -- ndownloader.figshare is a good host
 # alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
-MODEL_WGET='https://ndownloader.figshare.com/files/<file-number>'
-GIT_BRANCH='master'
+MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/articletopic/person_taxonomy.tsv'
+GIT_BRANCH='person'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -50,10 +50,10 @@ echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-#echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+echo "Downloading model, hang on..."
+cd ${TMP_PATH}
+wget -O person_taxonomy.tsv ${MODEL_WGET}
+mv person_taxonomy.tsv ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}

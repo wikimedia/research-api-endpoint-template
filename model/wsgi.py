@@ -1,7 +1,8 @@
 # Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
+import csv
 import os
+import re
 
-import fasttext
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import mwapi
@@ -19,128 +20,143 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 # fast-text model for making predictions
-FT_MODEL = fasttext.load_model(os.path.join(__dir__, 'resources/model.bin'))
+PERSON_TAXONOMY = {}
+# Occupations which are overly generic
+# Worker, Person, Individual, Researcher, Academic, Official, White-collar worker, Creator, Position, Profession, Group of humans, Organization
+PERSON_STOPPOINTS = ['Q327055', 'Q215627', 'Q795052', 'Q1650915', 'Q3400985', 'Q599151', 'Q255274', 'Q2500638', 'Q4164871', 'Q28640', 'Q16334295', 'Q43229']
+MAX_ITER = 8
+WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
 
-@app.route('/api/v1/topic', methods=['GET'])
+@app.route('/api/v1/occupation', methods=['GET'])
 def get_topics():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    lang, page_title, threshold, debug, error = validate_api_args()
+    qid, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
-        outlinks = get_outlinks(page_title, lang)
-        topics = get_predictions(features_str=' '.join(outlinks), model=FT_MODEL, threshold=threshold, debug=debug)
-        result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  'results': [{'topic': t[0], 'score': t[1]} for t in topics]
+        occupations = get_occupations(qid)
+        results = set()
+        unmapped = []
+        for occ in occupations:
+            occ_types = leaf_to_root(occ)
+            if occ_types:
+                results.update(occ_types)
+            else:
+                unmapped.append(occ)
+        result = {'qid': qid,
+                  'results': [{'qid':r, 'lbl':PERSON_TAXONOMY[r]} for r in results],
+                  'unmapped': unmapped
                   }
-        if debug:
-            result['outlinks'] = sorted(outlinks)
         return jsonify(result)
 
-def get_predictions(features_str, model, threshold=0.5, debug=False):
-    """Get fastText model predictions for an input feature string."""
-    lbls, scores = model.predict(features_str, k=-1)
-    results = {l:s for l,s in zip(lbls, scores)}
-    if debug:
-        print(results)
-    sorted_res = [(l.replace("__label__", ""), results[l]) for l in sorted(results, key=results.get, reverse=True)]
-    above_threshold = [r for r in sorted_res if r[1] >= threshold]
-    lbls_above_threshold = []
-    if above_threshold:
-        for res in above_threshold:
-            if debug:
-                print('{0}: {1:.3f}'.format(*res))
-            if res[1] > threshold:
-                lbls_above_threshold.append(res[0])
-    elif debug:
-        print("No label above {0} threshold.".format(threshold))
-        print("Top result: {0} ({1:.3f}) -- {2}".format(sorted_res[0][0], sorted_res[0][1], sorted_res[0][2]))
 
-    return above_threshold
+def validate_qid(qid):
+    """Make sure QID string is expected format."""
+    return re.match('^Q[0-9]+$', qid)
 
-def get_outlinks(title, lang, limit=1000, session=None):
-    """Gather set of up to `limit` outlinks for an article."""
+def get_occupations(qid, session=None):
+    # NOTE: doesn't check for human
+    # https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=Q42&property=P106&format=json&formatversion=2
     if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
-
-    # generate list of all outlinks (to namespace 0) from the article and their associated Wikidata IDs
+        session = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CUSTOM_UA'])
     result = session.get(
-        action="query",
-        generator="links",
-        titles=title,
-        redirects='',
-        prop='pageprops',
-        ppprop='wikibase_item',
-        gplnamespace=0,  # this actually doesn't seem to work :/
-        gpllimit=50,
+        action="wbgetclaims",
+        entity=qid,
+        property='P106',
         format='json',
-        formatversion=2,
-        continuation=True
+        formatversion=2
     )
-    try:
-        outlink_qids = set()
-        for r in result:
-            for outlink in r['query']['pages']:
-                if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
-                    qid = outlink.get('pageprops', {}).get('wikibase_item', None)
-                    if qid is not None:
-                        outlink_qids.add(qid)
-            if len(outlink_qids) > limit:
-                break
-        return outlink_qids
-    except Exception:
-        return None
+    return [q['mainsnak']['datavalue']['value']['id'] for q in result['claims']['P106'] if q.get('mainsnak', {}).get('datatype') == 'wikibase-item']
 
-def get_canonical_page_title(title, lang, session=None):
-    """Resolve redirects / normalization -- used to verify that an input page_title exists"""
+def leaf_to_root(qid, session=None, iter_num=0):
+    # Uses subclass-of (P279) as that seems optimal for occupation. Potentially could be tweaked to include other properties.
+    if qid in PERSON_TAXONOMY:
+        return {qid}
+    elif qid in PERSON_STOPPOINTS:
+        return set()
+    elif iter_num == MAX_ITER:
+        return set()
     if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+        session = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CUSTOM_UA'])
+    roots = set()
+    scs = get_superclasses(qid, session)
+    for sc in scs:
+        if sc in PERSON_STOPPOINTS:
+            continue
+        elif sc in PERSON_TAXONOMY:
+            roots.add(sc)
+        else:
+            roots.update(leaf_to_root(sc, session, iter_num+1))
+    return roots
+
+def get_superclasses(qid, session=None):
+    if session is None:
+        session = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CUSTOM_UA'])
+    result = session.get(
+        action="wbgetclaims",
+        entity=qid,
+        property='P279',
+        format='json',
+        formatversion=2
+    )
+    scs = []
+    for sc in result['claims'].get('P279', []):
+        if sc.get('mainsnak', {}).get('datatype') == 'wikibase-item':
+            try:
+                scs.append(sc['mainsnak']['datavalue']['value']['id'])
+            except KeyError:
+                continue
+    return scs
+
+
+def title_to_qid(title, lang):
+    """Get Wikidata item ID for Wikipedia article(s)"""
+    session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
 
     result = session.get(
         action="query",
-        prop="info",
-        inprop='',
-        redirects='',
+        prop="pageprops",
+        ppprop='wikibase_item',
+        redirects=True,
         titles=title,
         format='json',
         formatversion=2
     )
-    print(result)
-    if 'missing' in result['query']['pages'][0]:
-        return None
-    else:
-        return result['query']['pages'][0]['title']
+
+    return result['query']['pages'][0]['pageprops'].get('wikibase_item')
 
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
-    lang = None
-    page_title = None
-    threshold = 0.5
-    if request.args.get('title') and request.args.get('lang'):
-        lang = request.args['lang']
-        page_title = get_canonical_page_title(request.args['title'], lang)
-        if page_title is None:
-            error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, request.args['title'])
-    elif request.args.get('lang'):
-        error = 'missing an article title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-    elif request.args.get('title'):
-        error = 'missing a language -- e.g., "en" for English'
+    qid = None
+    if 'qid' in request.args:
+        if validate_qid(request.args['qid'].upper()):
+            qid = request.args['qid'].upper()
+        else:
+            error = "Error: poorly formatted 'qid' field. '{0}' does not match '^Q[0-9]+$'".format(request.args['qid'].upper())
+    elif 'title' in request.args and 'lang' in request.args:
+        if request.args['lang'] in WIKIPEDIA_LANGUAGE_CODES:
+            lang = request.args['lang']
+            title = request.args['title']
+            qid = title_to_qid(title, lang=lang)
+            if qid is None:
+                error = "Could not find Wikidata item for https://{0}.wikipedia.org/wiki/{1}".format(lang, title)
+        else:
+            error = "Error: did not recognize language code: {0}".format(request.args['lang'])
+
     else:
-        error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
+        error = "Error: no 'qid' or 'lang'+'title' field provided. Please specify."
 
-    if 'threshold' in request.args:
-        try:
-            threshold = float(request.args['threshold'])
-        except ValueError:
-            threshold = "Error: threshold value provided not a float: {0}".format(request.args['threshold'])
+    return qid, error
 
-    debug = False
-    if 'debug' in request.args:
-        debug = True
-        threshold = 0
-
-    return lang, page_title, threshold, debug, error
+def load_person_taxonomy():
+    with open(os.path.join(__dir__, 'resources/person_taxonomy.tsv'), 'r') as fin:
+        tsvreader = csv.reader(fin, delimiter='\t')
+        assert next(tsvreader) == ['QID', 'Label']
+        for line in tsvreader:
+            qid = line[0]
+            lbl = line[1]
+            PERSON_TAXONOMY[qid] = lbl
 
 application = app
 
