@@ -81,7 +81,9 @@ def get_occupations(qid, session=None):
         format='json',
         formatversion=2
     )
-    return [q['mainsnak']['datavalue']['value']['id'] for q in result['claims']['P106'] if q.get('mainsnak', {}).get('datatype') == 'wikibase-item']
+    if result.get('claims', {}).get('P106'):
+        return [q['mainsnak']['datavalue']['value']['id'] for q in result['claims']['P106'] if q.get('mainsnak', {}).get('datatype') == 'wikibase-item']
+    return []
 
 def leaf_to_root(qid, session=None, iter_num=0):
     # Uses subclass-of (P279) as that seems optimal for occupation. Potentially could be tweaked to include other properties.
