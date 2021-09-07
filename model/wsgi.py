@@ -45,7 +45,7 @@ def get_topics():
             else:
                 unmapped.append(occ)
 
-        lbls_needed = unmapped
+        lbls_needed = unmapped.copy()
         if lang != 'en':
             lbls_needed.extend([o for o in results])
         if lbls_needed:
