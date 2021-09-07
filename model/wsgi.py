@@ -140,7 +140,10 @@ def title_to_qid(title, lang):
         formatversion=2
     )
 
-    return result['query']['pages'][0]['pageprops'].get('wikibase_item')
+    try:
+        return result['query']['pages'][0]['pageprops'].get('wikibase_item')
+    except KeyError:
+        return None
 
 def get_labels(qids, lang='en', session=None):
     # https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q1|Q42&props=labels&languages=en&format=json&formatversion=2
