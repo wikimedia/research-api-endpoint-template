@@ -12,8 +12,8 @@ TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting u
 
 echo "Downloading data, hang on..."
 cd ${TMP_PATH}
-wget -O gender_all_latest.sqlite -q ${MODEL_WGET}
-mv gender_all_latest.sqlite ${ETC_PATH}/resources
+wget -O person_taxonomy.tsv -q ${MODEL_WGET}
+mv person_taxonomy.tsv ${ETC_PATH}/resources
 chown -R www-data:www-data ${ETC_PATH}
 
 echo "Enabling and starting services..."
