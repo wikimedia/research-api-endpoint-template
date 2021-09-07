@@ -31,20 +31,21 @@ WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', '
 def get_topics():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
     qid, error = validate_api_args()
+    session = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CUSTOM_UA'])
     if error is not None:
         return jsonify({'Error': error})
     else:
-        occupations = get_occupations(qid)
+        occupations = get_occupations(qid, session)
         results = set()
         unmapped = []
         for occ in occupations:
-            occ_types = leaf_to_root(occ)
+            occ_types = leaf_to_root(occ, session, 0)
             if occ_types:
                 results.update(occ_types)
             else:
                 unmapped.append(occ)
         if unmapped:
-            qid_to_lbl = get_labels(unmapped, 'en')
+            qid_to_lbl = get_labels(unmapped, 'en', session)
             unmapped = [{'qid':q, 'lbl':qid_to_lbl[q]} for q in unmapped]
         result = {'qid': qid,
                   'results': [{'qid':r, 'lbl':PERSON_TAXONOMY[r]} for r in results],
@@ -128,9 +129,10 @@ def title_to_qid(title, lang):
 
     return result['query']['pages'][0]['pageprops'].get('wikibase_item')
 
-def get_labels(qids, lang='en'):
+def get_labels(qids, lang='en', session=None):
     # https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q1|Q42&props=labels&languages=en&format=json&formatversion=2
-    session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+    if session is None:
+        session = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CUSTOM_UA'])
 
     result = session.get(
         action="wbgetentities",
