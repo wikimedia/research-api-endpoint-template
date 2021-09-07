@@ -47,7 +47,7 @@ def get_topics():
 
         lbls_needed = unmapped
         if lang != 'en':
-            lbls_needed.extend([o for o in occ_types])
+            lbls_needed.extend([o for o in results])
         if lbls_needed:
             qid_to_lbl = get_labels(lbls_needed, lang, session)
             unmapped = [{'qid':q, 'lbl':qid_to_lbl[q]} for q in unmapped]
@@ -168,7 +168,6 @@ def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
     qid = None
-    lang = 'en'
     if 'qid' in request.args:
         if validate_qid(request.args['qid'].upper()):
             qid = request.args['qid'].upper()
@@ -186,6 +185,10 @@ def validate_api_args():
 
     else:
         error = "Error: no 'qid' or 'lang'+'title' field provided. Please specify."
+
+    lang = 'en'
+    if 'resp_lang' in request.args and request.args['resp_lang'] in WIKIPEDIA_LANGUAGE_CODES:
+        lang = request.args['resp_lang']
 
     return qid, lang, error
 
