@@ -159,6 +159,7 @@ def load_person_taxonomy():
             PERSON_TAXONOMY[qid] = lbl
 
 application = app
+load_person_taxonomy()
 
 if __name__ == '__main__':
     application.run()
