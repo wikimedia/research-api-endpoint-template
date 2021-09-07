@@ -30,7 +30,7 @@ WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', '
 @app.route('/api/v1/occupation', methods=['GET'])
 def get_topics():
     """Wikipedia-based topic modeling endpoint. Makes prediction based on outlinks associated with a Wikipedia article."""
-    qid, error = validate_api_args()
+    qid, lang, error = validate_api_args()
     session = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CUSTOM_UA'])
     if error is not None:
         return jsonify({'Error': error})
@@ -44,13 +44,24 @@ def get_topics():
                 results.update(occ_types)
             else:
                 unmapped.append(occ)
-        if unmapped:
-            qid_to_lbl = get_labels(unmapped, 'en', session)
+
+        lbls_needed = unmapped
+        if lang != 'en':
+            lbls_needed.extend([o for o in occ_types])
+        if lbls_needed:
+            qid_to_lbl = get_labels(lbls_needed, lang, session)
             unmapped = [{'qid':q, 'lbl':qid_to_lbl[q]} for q in unmapped]
-        result = {'qid': qid,
-                  'results': [{'qid':r, 'lbl':PERSON_TAXONOMY[r]} for r in results],
-                  'unmapped': unmapped
-                  }
+
+        if lang == 'en':
+            result = {'qid': qid,
+                      'results': [{'qid':r, 'lbl':PERSON_TAXONOMY[r]} for r in results],
+                      'unmapped': unmapped
+                      }
+        else:
+            result = {'qid': qid,
+                      'results': [{'qid': r, 'lbl': qid_to_lbl[r]} for r in results],
+                      'unmapped': unmapped
+                      }
         return jsonify(result)
 
 
@@ -157,6 +168,7 @@ def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
     qid = None
+    lang = 'en'
     if 'qid' in request.args:
         if validate_qid(request.args['qid'].upper()):
             qid = request.args['qid'].upper()
@@ -175,7 +187,7 @@ def validate_api_args():
     else:
         error = "Error: no 'qid' or 'lang'+'title' field provided. Please specify."
 
-    return qid, error
+    return qid, lang, error
 
 def load_person_taxonomy():
     with open(os.path.join(__dir__, 'resources/person_taxonomy.tsv'), 'r') as fin:
