@@ -3,13 +3,14 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='topicmodel'  # directory where repo code will go
+REPO_LBL='edit-types'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 # model binary / data -- ndownloader.figshare is a good host
 # alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
 MODEL_WGET='https://ndownloader.figshare.com/files/<file-number>'
-GIT_BRANCH='master'
+FILE_NAME='file-name.ext'
+GIT_BRANCH='edit-types'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -52,8 +53,8 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 #echo "Downloading model, hang on..."
 #cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+#wget -O ${FILE_NAME} ${MODEL_WGET}
+#mv ${FILE_NAME} ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}

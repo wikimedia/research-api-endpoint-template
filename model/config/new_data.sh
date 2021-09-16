@@ -3,8 +3,9 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='topicmodel'  # directory where repo code will go
+REPO_LBL='edit-types'  # directory where repo code will go
 MODEL_WGET='https://ndownloader.figshare.com/files/<file-number>'
+FILE_NAME='file-name.ext'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -12,8 +13,8 @@ TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting u
 
 echo "Downloading data, hang on..."
 cd ${TMP_PATH}
-wget -O gender_all_latest.sqlite -q ${MODEL_WGET}
-mv gender_all_latest.sqlite ${ETC_PATH}/resources
+wget -O ${FILE_NAME} -q ${MODEL_WGET}
+mv ${FILE_NAME} ${ETC_PATH}/resources
 chown -R www-data:www-data ${ETC_PATH}
 
 echo "Enabling and starting services..."
