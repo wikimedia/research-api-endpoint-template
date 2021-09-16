@@ -26,7 +26,8 @@ def get_topics():
     if error is not None:
         return jsonify({'error': error})
     else:
-        diff = get_diff(lang, revid, title)
+        # diff = get_diff(lang, revid, title)
+        diff = None  # don't make API call until actually doing something with the wikitext
         actions = get_actions(diff)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': actions
