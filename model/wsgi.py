@@ -19,7 +19,7 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-# fast-text model for making predictions
+# high-level occupations
 PERSON_TAXONOMY = {}
 # Occupations which are overly generic
 # Worker, Person, Individual, Researcher, Academic, Official, White-collar worker, Creator, Position, Profession, Group of humans, Organization
@@ -36,12 +36,13 @@ def get_topics():
         return jsonify({'Error': error})
     else:
         occupations = get_occupations(qid, session)
-        results = set()
+        results = {}
         unmapped = []
         for occ in occupations:
             occ_types = leaf_to_root(occ, session, 0)
             if occ_types:
-                results.update(occ_types)
+                for ot in occ_types:
+                    results[ot] = results.get(ot, 0) + 1
             else:
                 unmapped.append(occ)
 
@@ -52,14 +53,15 @@ def get_topics():
             qid_to_lbl = get_labels(lbls_needed, lang, session)
             unmapped = [{'qid':q, 'lbl':qid_to_lbl[q]} for q in unmapped]
 
+        results_ordered = sorted(results, key=results.get, reverse=True)
         if lang == 'en':
             result = {'qid': qid,
-                      'results': [{'qid':r, 'lbl':PERSON_TAXONOMY[r]} for r in results],
+                      'results': [{'qid':r, 'lbl':PERSON_TAXONOMY[r], 'support':results[r]} for r in results_ordered],
                       'unmapped': unmapped
                       }
         else:
             result = {'qid': qid,
-                      'results': [{'qid': r, 'lbl': qid_to_lbl[r]} for r in results],
+                      'results': [{'qid': r, 'lbl': qid_to_lbl[r], 'support':results[r]} for r in results_ordered],
                       'unmapped': unmapped
                       }
         return jsonify(result)
@@ -88,22 +90,23 @@ def get_occupations(qid, session=None):
 def leaf_to_root(qid, session=None, iter_num=0):
     # Uses subclass-of (P279) as that seems optimal for occupation. Potentially could be tweaked to include other properties.
     if qid in PERSON_TAXONOMY:
-        return {qid}
+        return {qid:1}
     elif qid in PERSON_STOPPOINTS:
-        return set()
+        return {}
     elif iter_num == MAX_ITER:
-        return set()
+        return {}
     if session is None:
         session = mwapi.Session('https://www.wikidata.org', user_agent=app.config['CUSTOM_UA'])
-    roots = set()
+    roots = {}
     scs = get_superclasses(qid, session)
     for sc in scs:
         if sc in PERSON_STOPPOINTS:
             continue
         elif sc in PERSON_TAXONOMY:
-            roots.add(sc)
+            roots[sc] = roots.get(sc, 0) + 1
         else:
-            roots.update(leaf_to_root(sc, session, iter_num+1))
+            for ssc in leaf_to_root(sc, session, iter_num+1):
+                roots[ssc] = roots.get(ssc, 0) + 1
     return roots
 
 def get_superclasses(qid, session=None):
