@@ -18,181 +18,122 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-# fast-text model for making predictions
-NON_GENDERED_LBL = 'N/A'
-GENDER_LABELS = {
-    'Q48270':'non-binary',
-    'Q6581072':'female',
-    'Q27679684':'transfeminine',
-    'Q15145778':'cisgender male',
-    'Q859614':'bigender',
-    'Q48279':'third gender',
-    'Q1289754':'neutrois',
-    'Q3277905':'māhū',
-    'Q179294':'eunuch',
-    'Q189125':'transgender person',
-    'Q2449503':'transgender male',
-    'Q1097630':'intersex',
-    'Q505371':'agender',
-    'Q27679766':'transmasculine',
-    'Q15145779':'cisgender female',
-    'Q18116794':'genderfluid',
-    'Q207959':'androgynous',
-    'Q6581097':'male',
-    'Q301702':'two-spiriit',
-    'Q1052281':'transgender female',
-    'Q93954933':'demiboy',
-    'Q12964198':'genderqueer',
-    'Q52261234':'neutral sex'
-}
-
-@app.route('/api/v1/outlinks-summary', methods=['GET'])
-@app.route('/api/v1/summary', methods=['GET'])
-def get_outlinks_summary():
-    return get_summary('outlinks')
-
 @app.route('/api/v1/outlinks-details', methods=['GET'])
 @app.route('/api/v1/details', methods=['GET'])
 def get_outlinks_details():
-    return get_details('outlinks')
+    return get_details()
 
-@app.route('/api/v1/inlinks-summary', methods=['GET'])
-def get_inlinks_summary():
-    return get_summary('inlinks')
-
-@app.route('/api/v1/inlinks-details', methods=['GET'])
-def get_inlinks_details():
-    return get_details('inlinks')
-
-
-def get_summary(linktype='outlinks'):
-    """Get gender distribution summary (aggregate stats) for links to/from an article."""
-    lang, page_title, gendered_only, error = validate_api_args()
-    if error is not None:
-        return jsonify({'Error': error})
+def qual_to_cat(q):
+    if q <= 0.167:
+        return 'Stub'
+    elif q <= 0.33:
+        return 'Start'
+    elif q <= 0.5:
+        return 'C-class'
+    elif q <= 0.667:
+        return 'B-class'
+    elif q <= 0.833:
+        return 'GA'
+    elif q <= 1:
+        return 'FA'
     else:
-        links = get_links(page_title, lang, linktype=linktype)
-        gender_dist = get_distribution(links, gendered_only)
-        num_links = sum([g[1] for g in gender_dist])
-        result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  f'num_{linktype}': num_links,
-                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_links} for g in gender_dist]
-                  }
-        return jsonify(result)
+        return None
 
-def get_details(linktype='outlinks'):
+
+def get_details():
     """Get gender distribution details (individual links and aggregate stats) for links to/from an article."""
-    lang, page_title, gendered_only, error = validate_api_args()
+    lang, page_title, error = validate_api_args()
     if error is not None:
         return jsonify({'Error': error})
     else:
-        links = get_links(page_title, lang, linktype=linktype, verbose=True)
-        gender_by_title = add_gender_data(links, gendered_only)
-        gender_dist = get_distribution(set(links.values()), gendered_only)
-        num_links = sum([g[1] for g in gender_dist])
+        links = get_links(page_title, lang, verbose=True)
+        qual_by_title = add_quality_data(links)
+        qual_dist = get_distribution(set(links.values()))
+        num_links = len(links)
         result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
-                  f'num_{linktype}': num_links,
-                  'summary': [{'gender': g[0], 'num_links': g[1], 'pct_links':g[1] / num_links} for g in gender_dist],
-                  'details': [{'title':g[0], 'gender':g[1]} for g in gender_by_title]
+                  'num_links': num_links,
+                  'summary': [{'qual': q[0], 'num_links': q[1], 'pct_links':q[1] / num_links} for q in qual_dist],
+                  'details': [{'title':q[0], 'qual':q[1]} for q in qual_by_title]
                   }
         return jsonify(result)
 
-def add_gender_data(links, gendered_only=True):
-    title_gender = []
-    with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
-        for title, qid in links.items():
+def add_quality_data(links):
+    title_qual = []
+    with SqliteDict(os.path.join(__dir__, 'resources/quality.sqlite')) as qual_db:
+        for title, article_id in links.items():
             try:
-                g = gender_db[qid]  # get gender QID value
-                g = GENDER_LABELS.get(g, g)  # convert value to label
-                title_gender.append((title, g))
+                q = qual_db[article_id]  # get qual score
+                title_qual.append((title, q))
             except KeyError:
-                if not gendered_only:
-                    title_gender.append((title, NON_GENDERED_LBL))
+                continue
 
-    return title_gender
+    return title_qual
 
-def get_distribution(links, gendered_only=True):
+def get_distribution(links):
     """Get fastText model predictions for an input feature string."""
-    gender_dist = {}
-    with SqliteDict(os.path.join(__dir__, 'resources/gender_all_2021_07.sqlite')) as gender_db:
-        for qid in links:
+    qual_dist = {}
+    with SqliteDict(os.path.join(__dir__, 'resources/quality.sqlite')) as qual_db:
+        for article_id in links:
             try:
-                g = gender_db[qid]  # get gender QID value
-                g = GENDER_LABELS.get(g, g)  # convert value to label
-                gender_dist[g] = gender_dist.get(g, 0) + 1
+                g = qual_db[article_id]  # get qual score
+                gc = qual_to_cat(g)
+                qual_dist[gc] = qual_dist.get(gc, 0) + 1
             except KeyError:
-                if not gendered_only:
-                    gender_dist[NON_GENDERED_LBL] = gender_dist.get(NON_GENDERED_LBL, 0) + 1
+                continue
 
-    gender_dist = [(lbl, gender_dist[lbl]) for lbl in sorted(gender_dist, key=gender_dist.get, reverse=True)]
-    return gender_dist
+    qual_dist = [(lbl, qual_dist[lbl]) for lbl in sorted(qual_dist, key=qual_dist.get, reverse=True)]
+    return qual_dist
 
-def get_links(title, lang, linktype='outlinks', limit=1500, session=None, verbose=False):
+def get_links(title, lang, limit=1500, session=None, verbose=False):
     """Gather set of up to `limit` links for an article."""
     if session is None:
         session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
 
     # generate list of all out/inlinks (to namespace 0) from the article and their associated Wikidata IDs
-    if linktype == 'outlinks':
-        result = session.get(
+    result = session.get(
             action="query",
             generator="links",
             titles=title,
             redirects='',
             prop='pageprops',
-            ppprop='wikibase_item',
+            ppprop='none',
             gplnamespace=0,  # this actually doesn't seem to work :/
             gpllimit=50,
             format='json',
             formatversion=2,
             continuation=True
-        )
-    elif linktype == 'inlinks':
-        result = session.get(
-            action="query",
-            generator="backlinks",
-            gbltitle=title,
-            redirects='',
-            prop='pageprops',
-            ppprop='wikibase_item',
-            gblnamespace=0,  # this actually doesn't seem to work :/
-            gbllimit=50,
-            format='json',
-            formatversion=2,
-            continuation=True
-        )
-    else:
-        return {}
+    )
+
     try:
         if verbose:
-            link_qids = {}
+            link_article_ids = {}
             redirects = {}
             for r in result:
                 for rd in r['query'].get('redirects', []):
                     redirects[rd['to']] = rd['from']
                 for link in r['query']['pages']:
                     if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
-                        qid = link.get('pageprops', {}).get('wikibase_item', None)
-                        if qid is not None:
-                            title = link['title']
-                            link_qids[title.lower()] = qid
-                            # if redirect, add in both forms because the link might be present in both forms too
-                            if title in redirects:
-                                link_qids[redirects.get(title).lower()] = qid
-                if len(link_qids) > limit:
+                        pid = link['pageid']
+                        title = link['title']
+                        article_id = f'{lang}wiki-{pid}'
+                        link_article_ids[title.lower()] = article_id
+                        # if redirect, add in both forms because the link might be present in both forms too
+                        if title in redirects:
+                            link_article_ids[redirects.get(title).lower()] = article_id
+                if len(link_article_ids) > limit:
                     break
-            return link_qids
+            return link_article_ids
         else:
-            link_qids = set()
+            link_article_ids = set()
             for r in result:
                 for link in r['query']['pages']:
                     if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
-                        qid = link.get('pageprops', {}).get('wikibase_item', None)
-                        if qid is not None:
-                            link_qids.add(qid)
-                if len(link_qids) > limit:
+                        pid = link['pageid']
+                        article_id = f'{lang}wiki-{pid}'
+                        link_article_ids.add(article_id)
+                if len(link_article_ids) > limit:
                     break
-            return link_qids
+            return link_article_ids
     except Exception:
         return {}
 
@@ -232,11 +173,7 @@ def validate_api_args():
     else:
         error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
 
-    gendered_only = True
-    if 'all' in request.args:
-        gendered_only = False
-
-    return lang, page_title, gendered_only, error
+    return lang, page_title, error
 
 application = app
 

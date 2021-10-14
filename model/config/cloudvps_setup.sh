@@ -5,7 +5,7 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/gender-data/gender_all_latest.sqlite'
+MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/quality/V1_2021_04/quality_2021_04.sqlite'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -39,7 +39,7 @@ python3 -m venv ${LIB_PATH}/p3env
 source ${LIB_PATH}/p3env/bin/activate
 
 echo "Cloning repositories..."
-git clone --branch article-gender-distribution ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch quality-bulk ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
@@ -47,8 +47,8 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 echo "Downloading model, hang on..."
 cd ${TMP_PATH}
-wget -O gender_all_2021_07.sqlite ${MODEL_WGET}
-mv gender_all_2021_07.sqlite ${ETC_PATH}/resources
+wget -O quality.sqlite ${MODEL_WGET}
+mv quality.sqlite ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
