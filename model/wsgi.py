@@ -1,17 +1,22 @@
-# Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
 import os
+import sys
+import traceback
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import mwapi
+import mwparserfromhell
 import yaml
+
+__dir__ = os.path.dirname(__file__)
+
+sys.path.append(__dir__)
+from differ import *
 
 app = Flask(__name__)
 
 WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
 EDIT_TYPES = ['fix grammar', 'fix spelling', 'wikilinks', 'images', 'categories', 'comment', 'formatting', 'references', 'facts', 'sections', 'alt-text', 'templates', 'external links', 'tables', 'restructure article', 'interwiki links']
-
-__dir__ = os.path.dirname(__file__)
 
 # load in app user-agent or any other app config
 app.config.update(
@@ -21,7 +26,7 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 @app.route('/api/v1/actions', methods=['GET'])
-def get_topics():
+def process_diff():
     """Label a given edit diff with which actions were taken."""
     lang, revid, title, error = validate_api_args()
     if error is not None:
@@ -39,6 +44,19 @@ def get_actions(diff):
     """Get predicted edit actions for a diff."""
     # TODO complete
     return [{'action':e, 'count':0} for e in EDIT_TYPES]
+
+@app.route('/api/v1/diff', methods=['GET'])
+def just_the_diff():
+    lang, revid, title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'error': error})
+    else:
+        diff = get_diff(lang, revid, title)
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
+                  'diff': diff
+                  }
+        return jsonify(result)
+
 
 def get_diff(lang, revid, title, session=None):
     """Gather set of up to `limit` outlinks for an article."""
@@ -59,14 +77,19 @@ def get_diff(lang, revid, title, session=None):
         format='json',
         formatversion=2,
     )
-    diff = None
+    formatted_diff = None
     try:
-        curr_wikitext = result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
-        prev_wikitext = result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
-        # TODO: process diff
+        curr_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
+        prev_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
+        t1, sections1 = sec_node_tree(mwparserfromhell.parse(prev_wikitext))
+        t2, sections2 = sec_node_tree(mwparserfromhell.parse(curr_wikitext))
+        d = Differ(t1, t2)
+        diff = d.get_corresponding_nodes()
+        formatted_diff = format_result(diff, sections1, sections2)
     except Exception:
+        traceback.print_exc()
         pass
-    return diff
+    return formatted_diff
 
 def get_page_title(lang, revid, session=None):
     """Get page associated with a given revision ID"""
