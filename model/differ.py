@@ -4,7 +4,7 @@ from anytree import Node, RenderTree, PostOrderIter, PreOrderIter, NodeMixin
 from anytree.util import leftsibling
 
 class OrderedNode(NodeMixin):  # Add Node feature
-    def __init__(self, name, ntype='Text', text_hash=None, idx=-1, text='', char_offset=0, parent=None, children=None):
+    def __init__(self, name, ntype='Text', text_hash=None, idx=-1, text='', char_offset=0, doc_idx=-1, parent=None, children=None):
         super(OrderedNode, self).__init__()
         self.name = name
         self.ntype = ntype
@@ -15,6 +15,7 @@ class OrderedNode(NodeMixin):  # Add Node feature
             self.text_hash = hash(str(text_hash))
         self.idx = idx
         self.char_offset = char_offset
+        self.doc_idx = doc_idx
         self.parent = parent
         if children:
             self.children = children
@@ -43,25 +44,25 @@ def node_to_name(n):
 
 def sec_node_tree(wt):
     root = OrderedNode('root', ntype="Article")
-    parent_by_level = {1: root}
     secname_to_text = {}
+    doc_idx = 0
     for s in wt.get_sections():
         if s:
             sec_hash = sec_to_name(s)
-            sec_lvl = s.nodes[0].level
             sec_text = str(s.nodes[0])
             for n in s.nodes[1:]:
                 if simple_node_class(n) == 'Heading':
                     break
                 sec_text += str(n)
             secname_to_text[sec_hash] = sec_text
-            s_node = OrderedNode(sec_hash, ntype="Heading", text=s.nodes[0], text_hash=sec_text, char_offset=0, parent=parent_by_level[sec_lvl-1])
-            parent_by_level[sec_lvl] = s_node
+            s_node = OrderedNode(sec_hash, ntype="Heading", text=s.nodes[0], text_hash=sec_text, char_offset=0, doc_idx=doc_idx, parent=root)
             char_offset = len(s_node.text)
+            doc_idx += 1
             for n in s.nodes[1:]:
                 if simple_node_class(n) == 'Heading':
                     break
-                n_node = OrderedNode(node_to_name(n), ntype=simple_node_class(n), text=n, char_offset=char_offset, parent=s_node)
+                n_node = OrderedNode(node_to_name(n), ntype=simple_node_class(n), text=n, char_offset=char_offset, doc_idx=doc_idx, parent=s_node)
+                doc_idx += 1
                 char_offset += len(str(n))
     return root, secname_to_text
 
