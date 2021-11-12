@@ -11,7 +11,8 @@ import yaml
 __dir__ = os.path.dirname(__file__)
 
 sys.path.append(__dir__)
-from differ import *
+import tree_differ as td
+import node_differ as nd
 
 app = Flask(__name__)
 
@@ -81,11 +82,11 @@ def get_diff(lang, revid, title, session=None):
     try:
         curr_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
         prev_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
-        t1, sections1 = sec_node_tree(mwparserfromhell.parse(prev_wikitext))
-        t2, sections2 = sec_node_tree(mwparserfromhell.parse(curr_wikitext))
-        d = Differ(t1, t2)
+        t1, sections1 = td.sec_node_tree(mwparserfromhell.parse(prev_wikitext))
+        t2, sections2 = td.sec_node_tree(mwparserfromhell.parse(curr_wikitext))
+        d = td.Differ(t1, t2)
         diff = d.get_corresponding_nodes()
-        formatted_diff = format_result(diff, sections1, sections2)
+        formatted_diff = td.format_result(diff, sections1, sections2)
     except Exception:
         traceback.print_exc()
         pass
