@@ -33,18 +33,19 @@ def process_diff():
     if error is not None:
         return jsonify({'error': error})
     else:
-        # diff = get_diff(lang, revid, title)
-        diff = None  # don't make API call until actually doing something with the wikitext
-        actions = get_actions(diff)
+        tree_diff = get_diff(lang, revid, title)
+        actions = get_actions(tree_diff)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': actions
                   }
         return jsonify(result)
 
-def get_actions(diff):
+def placeholder_get_actions(diff):
     """Get predicted edit actions for a diff."""
-    # TODO complete
     return [{'action':e, 'count':0} for e in EDIT_TYPES]
+
+def get_actions(diff):
+    return nd.get_diff_count(diff)
 
 @app.route('/api/v1/diff', methods=['GET'])
 def just_the_diff():
