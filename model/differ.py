@@ -109,6 +109,7 @@ class Differ:
         self.ins_cost = 1
         self.rem_cost = 1
         self.chg_cost = 1
+        self.nodetype_chg_cost = 100  # arbitrarily high to require changes to only occur w/i same nodes
 
         # Permanent store of transactions such that transactions[x][y] is the minimum
         # transactions to get from the sub-tree rooted at node x (in tree1) to the sub-tree
@@ -215,15 +216,19 @@ class Differ:
             return self.ins_cost
         elif n2 is None:
             return self.rem_cost
-        # Nodes are the same if the hash of their associated text is the same
-        # TODO: determine how this might mix with the different node types
+        # Inserts/Removes are easy. Changes are more complicated and should only be within same node type.
+        # Use arbitrarily high-value for nodetype changes to effectively ban.
+        elif n1.ntype != n2.ntype:
+            return self.nodetype_chg_cost
+        # next two functions check if both nodes are the same (criteria varies by nodetype)
         elif n1.ntype in ['Heading', "Paragraph"]:
             if n1.text == n2.text:
                 return 0
             else:
                 return self.chg_cost
-        elif n1.ntype == n2.ntype and n1.text_hash == n2.text_hash:
+        elif n1.text_hash == n2.text_hash:
             return 0
+        # otherwise, same node types and not the same, then change cost
         else:
             return self.chg_cost
 
