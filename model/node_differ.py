@@ -134,51 +134,47 @@ def get_diff_count(result):
     edit_types = {}
     for s in sections_affected:
         for r in result['remove']:
-            if not edit_types.get('remove'):
-                edit_types['remove'] = {'edit_types': {}}
             if r["section"] == s:
                 prev_text = result["sections-prev"][r["section"]]
-                prev_text = prev_text[r['offset']:r['offset'] + r['size']].replace("\n", "\\n")
-                is_edit_type_found, wikitext, edit_type = is_edit_type(prev_text, r['type'])
-
-                # check if edit_type in edit types dictionary
-                if edit_type in edit_types.get('remove').get('edit_types').keys() and is_edit_type:
-                    edit_types['remove']['edit_types'][edit_type] += 1
+                prev_text = prev_text[r['offset']:r['offset']+r['size']].replace("\n", "\\n")
+                is_edit_type_found,wikitext,edit_type = is_edit_type(prev_text,r['type'])
+                if edit_types.get(edit_type,{}) and is_edit_type_found:
+                    if edit_types.get(edit_type,{}).get('remove'):
+                        edit_types[edit_type]['remove'] = edit_types.get(edit_type).get('remove') + 1
+                    else:
+                        edit_types.get(edit_type,{}).update({'remove':1})
                 else:
-                    edit_types['remove']['edit_types'][edit_type] = 0
-                    if is_edit_type_found:
-                        edit_types['remove']['edit_types'][edit_type] += 1
+                    edit_types[edit_type] = {'remove':1}
 
         for i in result['insert']:
-            if not edit_types.get('insert'):
-                edit_types['insert'] = {'edit_types': {}}
             if i["section"] == s:
                 curr_text = result["sections-curr"][i["section"]]
-                curr_text = curr_text[i['offset']:i['offset'] + i['size']].replace("\n", "\\n")
-                is_edit_type_found, wikitext, edit_type = is_edit_type(curr_text, i['type'])
-                # check if edit_type in edit types dictionary
-                if edit_type in edit_types.get('insert').get('edit_types').keys() and is_edit_type:
-                    edit_types['insert']['edit_types'][edit_type] += 1
+                curr_text = curr_text[i['offset']:i['offset']+i['size']].replace("\n", "\\n")
+                is_edit_type_found,wikitext,edit_type = is_edit_type(curr_text,i['type'])
+                #check if edit_type in edit types dictionary
+                if edit_types.get(edit_type,{}) and is_edit_type_found:
+                    if edit_types.get(edit_type,{}).get('insert'):
+                        edit_types[edit_type]['insert'] = edit_types.get(edit_type).get('insert') + 1
+                    else:
+                        edit_types.get(edit_type,{}).update({'insert':1})
                 else:
-                    edit_types['insert']['edit_types'][edit_type] = 0
-                    if is_edit_type_found:
-                        edit_types['insert']['edit_types'][edit_type] += 1
+                    edit_types[edit_type] = {'insert':1}
 
         for c in result['change']:
-            if not edit_types.get('change'):
-                edit_types['change'] = {'edit_types': {}}
+            
             if c["prev"]["section"] == s:
                 prev_text = result["sections-prev"][c["prev"]["section"]]
-                prev_text = prev_text[c["prev"]['offset']:c["prev"]['offset'] + c["prev"]['size']].replace("\n", "\\n")
+                prev_text = prev_text[c["prev"]['offset']:c["prev"]['offset']+c["prev"]['size']].replace("\n", "\\n")
                 curr_text = result["sections-curr"][c["curr"]["section"]]
-                curr_text = curr_text[c["curr"]['offset']:c["curr"]['offset'] + c["curr"]['size']].replace("\n", "\\n")
-                is_edit_type_found, wikitext, edit_type = is_edit_type(prev_text, c['prev']['type'])
-                # check if edit_type in edit types dictionary
-                if edit_type in edit_types.get('change').get('edit_types').keys() and is_edit_type:
-                    edit_types['change']['edit_types'][edit_type] += 1
+                curr_text = curr_text[c["curr"]['offset']:c["curr"]['offset']+c["curr"]['size']].replace("\n", "\\n")
+                is_edit_type_found,wikitext,edit_type = is_edit_type(prev_text,c['prev']['type'])
+                #check if edit_type in edit types dictionary
+                if edit_types.get(edit_type,{}) and is_edit_type_found:
+                    if edit_types.get(edit_type,{}).get('change'):
+                        edit_types[edit_type]['change'] = edit_types.get(edit_type).get('change') + 1
+                    else:
+                        edit_types.get(edit_type,{}).update({'change':1})
                 else:
-                    edit_types['change']['edit_types'][edit_type] = 0
-                    if is_edit_type_found:
-                        edit_types['change']['edit_types'][edit_type] += 1
+                    edit_types[edit_type] = {'change':1}
 
     return edit_types
