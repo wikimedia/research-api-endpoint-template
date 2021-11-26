@@ -2,20 +2,27 @@ import time
 
 from anytree import Node, RenderTree, PostOrderIter, PreOrderIter, NodeMixin
 from anytree.util import leftsibling
+import mwparserfromhell
+
 
 class OrderedNode(NodeMixin):  # Add Node feature
-    def __init__(self, name, ntype='Text', text_hash=None, idx=-1, text='', char_offset=0, doc_idx=-1, parent=None, children=None):
+    def __init__(self, name, ntype='Text', text_hash=None, idx=-1, text='', char_offset=-1, parent=None, children=None):
         super(OrderedNode, self).__init__()
-        self.name = name
-        self.ntype = ntype
-        self.text = str(text)
+        self.name = name  # For debugging purposes
+        self.ntype = ntype  # Different node types can be treated differently when computing equality
+        self.text = str(text)  # Text that can then be passed to a diffing library
+        # Used for quickly computing equality for most nodes.
+        # Generally this just a simple hash of self.text (wikitext associated with a node) but
+        # the text hash for sections and paragraphs is based on all the content within the section/paragraph
+        # so it can be used for pruning while self.text is just the text that creates the section/paragraph
+        # e.g., "==Section==\nThis is a section." would have as text "==Section==" but hash the full.
+        # so the Differ doesn't identify a section/paragraph as changing when content within it is changed
         if text_hash is None:
             self.text_hash = hash(self.text)
         else:
             self.text_hash = hash(str(text_hash))
-        self.idx = idx
-        self.char_offset = char_offset
-        self.doc_idx = doc_idx
+        self.idx = idx  # Used by Differ -- Post order on tree from 0...# nodes - 1
+        self.char_offset = char_offset  # make it easy to find node in section text
         self.parent = parent
         if children:
             self.children = children
@@ -26,12 +33,14 @@ class OrderedNode(NodeMixin):  # Add Node feature
 
 def simple_node_class(node):
     """e.g., "<class 'mwparserfromhell.nodes.heading.Heading'>" -> "Heading"."""
-    return str(type(node)).split('.')[-1].split("'")[0]
+    if type(node) == str:
+        return 'Text'
+    else:
+        return str(type(node)).split('.')[-1].split("'")[0]
 
-
-def sec_to_name(s):
+def sec_to_name(s, idx):
     """Converts a section to an interpretible name."""
-    return str(s.nodes[0].title) + f' (S.{s.nodes[0].level})'
+    return f'S#{idx}: {s.nodes[0].title} (L{s.nodes[0].level})'
 
 
 def node_to_name(n):
@@ -42,43 +51,65 @@ def node_to_name(n):
     else:
         return f'{simple_node_class(n)}: {n_txt}'
 
+def extract_text(node):
+    """Extract what text would be displayed from any node."""
+    ntype = simple_node_class(node)
+    if ntype == 'Text' or ntype == 'HTMLEntity':
+        return str(node)
+    elif ntype == 'Wikilink':
+        if node.text:
+            return str(node.text)
+        else:
+            return str(node.title)
+    elif ntype == 'ExternalLink' and node.title:
+        return str(node.title)
+    elif ntype == 'Tag' and node.tag != 'ref':
+        return str(node.contents)
+    else:  # Heading, Table, Template, HTMLEntity, Comment, Argument
+        return ''
+
 def sec_node_tree(wt):
+    """Build tree of document nodes from Wikipedia article.
+
+    This approach builds a tree with an artificial 'root' node on the 1st level,
+    all of the article sections on the 2nd level (including an artificial Lede section),
+    and all of the text, link, template, etc. nodes nested under their respective sections.
+    """
     root = OrderedNode('root', ntype="Article")
     secname_to_text = {}
-    doc_idx = 0
-    for s in wt.get_sections():
+    for sidx, s in enumerate(wt.get_sections()):
         if s:
-            sec_hash = sec_to_name(s)
+            sec_hash = sec_to_name(s, sidx)
             sec_text = str(s.nodes[0])
             for n in s.nodes[1:]:
                 if simple_node_class(n) == 'Heading':
                     break
                 sec_text += str(n)
             secname_to_text[sec_hash] = sec_text
-            s_node = OrderedNode(sec_hash, ntype="Heading", text=s.nodes[0], text_hash=sec_text, char_offset=0, doc_idx=doc_idx, parent=root)
+            s_node = OrderedNode(sec_hash, ntype="Heading", text=s.nodes[0], text_hash=sec_text, char_offset=0, parent=root)
             char_offset = len(s_node.text)
-            doc_idx += 1
             for n in s.nodes[1:]:
                 if simple_node_class(n) == 'Heading':
                     break
-                n_node = OrderedNode(node_to_name(n), ntype=simple_node_class(n), text=n, char_offset=char_offset, doc_idx=doc_idx, parent=s_node)
-                doc_idx += 1
+                n_node = OrderedNode(node_to_name(n), ntype=simple_node_class(n), text=n, char_offset=char_offset, parent=s_node)
                 char_offset += len(str(n))
     return root, secname_to_text
 
 def format_diff(node):
+    """Convert OrderedNode object into simple dictionary."""
     result = {'name':node.name,
               'type':node.ntype,
-              'offset':node.char_offset,
-              'size':len(node.text)}
+              'text':node.text,
+              'offset':node.char_offset}
     if node.ntype == 'Heading':
         result['section'] = node.name
     else:
         result['section'] = node.parent.name
     return result
 
+
 def format_result(diff, sections1, sections2):
-    result = {'remove':[], 'insert':[], 'change':[], 'sections-prev':{}, 'sections-curr':{}}
+    result = {'remove':[], 'insert':[], 'change':[], 'move':[], 'sections-prev':{}, 'sections-curr':{}}
     for n in diff['remove']:
         n_res = format_diff(n)
         result['remove'].append(n_res)
@@ -93,7 +124,162 @@ def format_result(diff, sections1, sections2):
         result['change'].append({'prev':pn_res, 'curr':cn_res})
         result['sections-prev'][pn_res['section']] = sections1[pn_res['section']]
         result['sections-curr'][cn_res['section']] = sections2[cn_res['section']]
+    for pn, cn in diff['move']:
+        pn_res = format_diff(pn)
+        cn_res = format_diff(cn)
+        result['move'].append({'prev':pn_res, 'curr':cn_res})
+        result['sections-prev'][pn_res['section']] = sections1[pn_res['section']]
+        result['sections-curr'][cn_res['section']] = sections2[cn_res['section']]
     return result
+
+def detect_moves(diff):
+    """Detect when nodes were moved (as opposed to removed + inserted)."""
+    prev_moved = []
+    curr_moved = []
+    for i,pn in enumerate(diff['remove']):
+        for j,cn in enumerate(diff['insert']):
+            if pn.ntype == cn.ntype and pn.text_hash == cn.text_hash:
+                prev_moved.append(i)
+                curr_moved.append(j)
+                break
+    diff['move'] = []
+    if prev_moved:
+        for i in range(len(prev_moved)):
+            pn = diff['remove'][prev_moved[i]]
+            cn = diff['insert'][curr_moved[i]]
+            diff['move'].append((pn, cn))
+        prev_moved = sorted(prev_moved, reverse=True)
+        for i in prev_moved:
+            diff['remove'].pop(i)
+        curr_moved = sorted(curr_moved, reverse=True)
+        for i in curr_moved:
+            diff['insert'].pop(i)
+
+
+def section_mapping(result, s1, s2):
+    """Build mapping of sections between previous and current versions of article."""
+    prev = list(s1.keys())
+    curr = list(s2.keys())
+    p_to_c = {}
+    c_to_p = {}
+    removed = []
+    for n in result['remove']:
+        if n['type'] == 'Heading':
+            for i, s in enumerate(prev):
+                if s == n['name']:
+                    removed.append(i)
+                    break
+    for idx in sorted(removed, reverse=True):
+        p_to_c[prev[idx]] = None
+        prev.pop(idx)
+    inserted = []
+    for n in result['insert']:
+        if n['type'] == 'Heading':
+            for i, s in enumerate(curr):
+                if s == n['name']:
+                    inserted.append(i)
+                    break
+    for idx in sorted(inserted, reverse=True):
+        c_to_p[curr[idx]] = None
+        curr.pop(idx)
+
+    # changes happen in place so don't effect structure of doc and can be ignored
+
+    for c in result['move']:
+        pn = c['prev']
+        cn = c['curr']
+        if pn['type'] == 'Heading':
+            prev_idx = None
+            curr_idx = None
+            for i, s in enumerate(prev):
+                if s == pn['name']:
+                    prev_idx = i
+                    break
+            for i, s in enumerate(curr):
+                if s == cn['name']:
+                    curr_idx = i
+                    break
+            if prev_idx is not None and curr_idx is not None:
+                s = curr.pop(curr_idx)
+                curr.insert(prev_idx, s)
+
+    for i in range(len(prev)):
+        p_to_c[prev[i]] = curr[i]
+        c_to_p[curr[i]] = prev[i]
+
+    return p_to_c, c_to_p
+
+
+def merge_text_changes(result, s1, s2):
+    """Replace isolated text changes with section-level text changes."""
+    p_to_c, c_to_p = section_mapping(result, s1, s2)
+    changes = []
+    prev_secs_checked = set()
+    curr_secs_checked = set()
+    for idx in range(len(result['remove']) - 1, -1, -1):
+        r = result['remove'][idx]
+        if r['type'] == 'Text':
+            prev_sec = r['section']
+            if prev_sec not in prev_secs_checked:
+                prev_secs_checked.add(prev_sec)
+                prev_text = ''.join([extract_text(n) for n in mwparserfromhell.parse(s1[prev_sec]).nodes])
+                curr_sec = p_to_c[prev_sec]
+                curr_secs_checked.add(curr_sec)
+                if curr_sec is None:
+                    changes.append({'prev': {'name': node_to_name(prev_text), 'type': 'Text', 'text': prev_text,
+                                             'section': prev_sec, 'offset': 0}})
+                else:
+                    curr_text = ''.join([extract_text(n) for n in mwparserfromhell.parse(s2[curr_sec]).nodes])
+                    if prev_text != curr_text:
+                        changes.append({'prev': {'name': node_to_name(prev_text), 'type': 'Text', 'text': prev_text,
+                                                 'section': prev_sec, 'offset': 0},
+                                        'curr': {'name': node_to_name(curr_text), 'type': 'Text', 'text': curr_text,
+                                                 'section': curr_sec, 'offset': 0}})
+            result['remove'].pop(idx)
+    for idx in range(len(result['insert']) - 1, -1, -1):
+        i = result['insert'][idx]
+        if i['type'] == 'Text':
+            curr_sec = i['section']
+            if curr_sec not in curr_secs_checked:
+                curr_secs_checked.add(curr_sec)
+                curr_text = ''.join([extract_text(n) for n in mwparserfromhell.parse(s2[curr_sec]).nodes])
+                prev_sec = c_to_p[curr_sec]
+                prev_secs_checked.add(prev_sec)
+                if prev_sec is None:
+                    changes.append({'curr': {'name': node_to_name(curr_text), 'type': 'Text', 'text': curr_text,
+                                             'section': curr_sec, 'offset': 0}})
+                else:
+                    prev_text = ''.join([extract_text(n) for n in mwparserfromhell.parse(s1[prev_sec]).nodes])
+                    if prev_text != curr_text:
+                        changes.append({'prev': {'name': node_to_name(prev_text), 'type': 'Text', 'text': prev_text,
+                                                 'section': prev_sec, 'offset': 0},
+                                        'curr': {'name': node_to_name(curr_text), 'type': 'Text', 'text': curr_text,
+                                                 'section': curr_sec, 'offset': 0}})
+            result['insert'].pop(idx)
+    for idx in range(len(result['change']) - 1, -1, -1):
+        pn = result['change'][idx]['prev']
+        cn = result['change'][idx]['curr']
+        if pn['type'] == 'Text':
+            prev_sec = pn['section']
+            if prev_sec not in prev_secs_checked:
+                prev_secs_checked.add(prev_sec)
+                prev_text = ''.join([extract_text(n) for n in mwparserfromhell.parse(s1[prev_sec]).nodes])
+                curr_sec = cn['section']
+                curr_text = ''.join([extract_text(n) for n in mwparserfromhell.parse(s2[curr_sec]).nodes])
+                if prev_text != curr_text:
+                    changes.append({'prev': {'name': node_to_name(prev_text), 'type': 'Text', 'text': prev_text,
+                                             'section': prev_sec, 'offset': 0},
+                                    'curr': {'name': node_to_name(curr_text), 'type': 'Text', 'text': curr_text,
+                                             'section': curr_sec, 'offset': 0}})
+            result['change'].pop(idx)
+
+    for c in changes:
+        if 'prev' in c and 'curr' in c:
+            result['change'].append(c)
+        elif 'prev' in c:
+            result['remove'].append(c['prev'])
+        elif 'curr' in c:
+            result['insert'].append(c['curr'])
 
 
 class Differ:
@@ -110,7 +296,7 @@ class Differ:
         self.ins_cost = 1
         self.rem_cost = 1
         self.chg_cost = 1
-        self.nodetype_chg_cost = 100  # arbitrarily high to require changes to only occur w/i same nodes
+        self.nodetype_chg_cost = 10  # arbitrarily high to encourage remove+insert when node types change
 
         # Permanent store of transactions such that transactions[x][y] is the minimum
         # transactions to get from the sub-tree rooted at node x (in tree1) to the sub-tree
@@ -320,7 +506,6 @@ class Differ:
 
     def get_corresponding_nodes(self):
         """Explain transactions"""
-        # Get inserts/removals/changes based on final set of transactions
         transactions = self.transactions[len(self.t1) - 1][len(self.t2) - 1]
         remove = []
         insert = []

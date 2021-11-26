@@ -102,7 +102,9 @@ def get_diff(lang, revid, title, session=None):
         t2, sections2 = td.sec_node_tree(mwparserfromhell.parse(curr_wikitext))
         d = td.Differ(t1, t2)
         diff = d.get_corresponding_nodes()
+        td.detect_moves(diff)
         formatted_diff = td.format_result(diff, sections1, sections2)
+        td.merge_text_changes(formatted_diff, sections1, sections2)
     except Exception:
         traceback.print_exc()
         pass
