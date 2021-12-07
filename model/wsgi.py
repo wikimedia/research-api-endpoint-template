@@ -33,8 +33,8 @@ def process_diff():
     if error is not None:
         return jsonify({'error': error})
     else:
-        tree_diff = None
-        actions = get_actions(tree_diff)
+        tree_diff = get_diff(lang, revid, title)  # set to None if placeholder
+        actions = get_actions(tree_diff)  # set to placeholder as needed
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': actions
                   }
