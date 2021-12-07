@@ -34,7 +34,7 @@ def process_diff():
         return jsonify({'error': error})
     else:
         tree_diff = None
-        actions = placeholder_get_actions(tree_diff)
+        actions = get_actions(tree_diff)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': actions
                   }
