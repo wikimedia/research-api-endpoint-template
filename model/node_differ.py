@@ -30,6 +30,131 @@ def filterLinksByNs(links, keep_ns):
     return links
 
 
+def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
+    """ Checks if a change occurs in wikitexts
+
+    Parameters
+    ----------
+    prev_wikitext : str
+        Previous Wikitext
+    curr_wikitext : str
+        Current Wikitext
+    node_type: str
+        Node type
+    Returns
+    -------
+    tuple
+        Tuple containing the bool and edit type
+    """
+    prev_parsed_text = mw.parse(prev_wikitext)
+    curr_parsed_text = mw.parse(curr_wikitext)
+
+    if node_type == 'Template':
+        prev_temp_dict = { temp.split('=')[0].strip():temp.split('=')[1] for temp in prev_parsed_text.filter_templates(recursive=False)[0].params}
+        curr_temp_dict = { temp.split('=')[0].strip():temp.split('=')[1] for temp in curr_parsed_text.filter_templates(recursive=False)[0].params}
+
+        #Get the difference between template parameters. If it is more than 0, then a change occured
+        if len(set(curr_temp_dict.items()) - set(prev_temp_dict.items())) > 0:
+            return True, 'Template'
+
+    if node_type == 'Wikilink':
+        prev_filtered_wikilink = prev_parsed_text.filter_wikilinks()[0]
+        curr_filtered_wikilink = curr_parsed_text.filter_wikilinks()[0]
+
+        #Check if wikilink that is not image or category changes
+        prev_wikilink_copy = prev_filtered_wikilink.copy()
+        curr_wikilink_copy = curr_filtered_wikilink.copy()
+
+        prev_wikilink = filterLinksByNs(prev_wikilink_copy, [0])
+        curr_wikilink = filterLinksByNs(curr_wikilink_copy, [0])
+
+        if len(prev_wikilink) > 0 and len(curr_wikilink) > 0:
+            if prev_wikilink[0].text != curr_wikilink[0].text or \
+                prev_wikilink[0].title != curr_wikilink[0].title:
+                return True, 'Wikilink'
+
+         #Check if category changes
+        prev_cat_copy = prev_filtered_wikilink.copy()
+        curr_cat_copy = curr_filtered_wikilink.copy()
+
+        prev_cat = filterLinksByNs(prev_cat_copy, [14])
+        curr_cat = filterLinksByNs(curr_cat_copy, [14])
+
+        if len(prev_cat) > 0 and len(curr_cat) > 0:
+            if prev_cat[0].text != curr_cat[0].text or \
+                prev_cat[0].title != curr_cat[0].title:
+                return True, 'Category'
+
+         #Check if image changes
+        prev_image_copy = prev_filtered_wikilink.copy()
+        curr_image_copy = prev_filtered_wikilink.copy()
+
+        prev_image = filterLinksByNs(prev_image_copy, [6])
+        curr_image = filterLinksByNs(curr_image_copy, [6])
+
+        if len(prev_image) > 0 and len(curr_image) > 0:
+            if prev_image[0].text != curr_image[0].text or \
+                prev_image[0].title != curr_image[0].title:
+                return True, 'Image'
+
+    if node_type == 'Text':
+        prev_filtered_text = prev_parsed_text.filter_text()[0]
+        curr_filtered_text = curr_parsed_text.filter_text()[0]
+
+        if prev_filtered_text.value != curr_filtered_text.value:
+            return True, 'Text'
+
+    if node_type == 'Tag':
+        #Check if a reference changes
+        prev_filtered_ref = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
+        curr_filtered_ref = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
+
+        if prev_filtered_ref.contents != curr_filtered_ref.contents:
+            return True, 'Reference'
+
+        #Check if a table changes
+        prev_filtered_table = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
+        curr_filtered_table = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
+
+        if prev_filtered_table.contents != curr_filtered_table.contents:
+            return True, 'Table'
+
+        #Check if a text format chnages
+        prev_filtered_text_formatting = prev_parsed_text.filter_tags()[0]
+        prev_filtered_text_formatting = re.findall("'{2}.*''", str(prev_filtered_text_formatting[0]))[0]
+        
+        curr_filtered_text_formatting = curr_parsed_text.filter_tags()[0]
+        curr_filtered_text_formatting = re.findall("'{2}.*''", str(curr_filtered_text_formatting[0]))[0]
+
+        if prev_filtered_text_formatting != curr_filtered_text_formatting:
+            return True, 'Text Formatting'
+
+
+    if node_type == 'Heading':
+        prev_filtered_section = prev_parsed_text.filter_heading()[0]
+        curr_filtered_section = curr_parsed_text.filter_heading()[0]
+
+        if prev_filtered_section.title != curr_filtered_section.title:
+            return True, 'Heading'
+
+    if node_type == 'Comment':
+        prev_filtered_comments = prev_parsed_text.filter_comments()[0]
+        curr_filtered_comments = curr.parsed_text.filter_comments()[0]
+        
+        if prev_filtered_comments.contents != curr_filtered_comments.contents:
+            return True, 'Comment'
+
+    if node_type == 'ExternalLink':
+        prev_filtered_external_links = prev_parsed_text.filter_external_links()[0]
+        curr_filtered_external_links = curr_parsed_text.filter_external_links()[0]
+
+        if prev_filtered_external_links.title != curr_filtered_external_links.title or \
+            prev_filtered_external_links.url != curr_filtered_external_links.url:
+            return True, 'ExternalLink'
+
+    return False, None
+
+
 def is_edit_type(wikitext, node_type):
     """ Checks if wikitext is an edit type
 
@@ -111,6 +236,7 @@ def is_edit_type(wikitext, node_type):
     else:
         return False, None, None
 
+
 def get_diff_count(result):
     """ Gets the edit type count of a diff
 
@@ -134,51 +260,37 @@ def get_diff_count(result):
     edit_types = {}
     for s in sections_affected:
         for r in result['remove']:
-            if not edit_types.get('remove'):
-                edit_types['remove'] = {'edit_types': {}}
             if r["section"] == s:
-                prev_text = result["sections-prev"][r["section"]]
-                prev_text = prev_text[r['offset']:r['offset'] + r['size']].replace("\n", "\\n")
-                is_edit_type_found, wikitext, edit_type = is_edit_type(prev_text, r['type'])
-
-                # check if edit_type in edit types dictionary
-                if edit_type in edit_types.get('remove').get('edit_types').keys() and is_edit_type:
-                    edit_types['remove']['edit_types'][edit_type] += 1
-                else:
-                    edit_types['remove']['edit_types'][edit_type] = 0
-                    if is_edit_type_found:
-                        edit_types['remove']['edit_types'][edit_type] += 1
+                text = r['text'].replace("\n", "\\n")
+                is_edit_type_found,wikitext,edit_type = is_edit_type(text,r['type'])
+                if is_edit_type_found:
+                    if edit_types.get(edit_type,{}):
+                        edit_types[edit_type]['remove'] = edit_types[edit_type].get('remove', 0) + 1
+                    else:
+                        edit_types[edit_type] = {'remove':1}
 
         for i in result['insert']:
-            if not edit_types.get('insert'):
-                edit_types['insert'] = {'edit_types': {}}
             if i["section"] == s:
-                curr_text = result["sections-curr"][i["section"]]
-                curr_text = curr_text[i['offset']:i['offset'] + i['size']].replace("\n", "\\n")
-                is_edit_type_found, wikitext, edit_type = is_edit_type(curr_text, i['type'])
-                # check if edit_type in edit types dictionary
-                if edit_type in edit_types.get('insert').get('edit_types').keys() and is_edit_type:
-                    edit_types['insert']['edit_types'][edit_type] += 1
-                else:
-                    edit_types['insert']['edit_types'][edit_type] = 0
-                    if is_edit_type_found:
-                        edit_types['insert']['edit_types'][edit_type] += 1
+                text = i['text'].replace("\n", "\\n")
+                is_edit_type_found,wikitext,edit_type = is_edit_type(text,i['type'])
+                #check if edit_type in edit types dictionary
+                if is_edit_type_found:
+                    if edit_types.get(edit_type,{}):
+                        edit_types[edit_type]['insert'] = edit_types[edit_type].get('insert', 0) + 1
+                    else:
+                        edit_types[edit_type] = {'insert':1}
 
         for c in result['change']:
-            if not edit_types.get('change'):
-                edit_types['change'] = {'edit_types': {}}
+            
             if c["prev"]["section"] == s:
-                prev_text = result["sections-prev"][c["prev"]["section"]]
-                prev_text = prev_text[c["prev"]['offset']:c["prev"]['offset'] + c["prev"]['size']].replace("\n", "\\n")
-                curr_text = result["sections-curr"][c["curr"]["section"]]
-                curr_text = curr_text[c["curr"]['offset']:c["curr"]['offset'] + c["curr"]['size']].replace("\n", "\\n")
-                is_edit_type_found, wikitext, edit_type = is_edit_type(prev_text, c['prev']['type'])
-                # check if edit_type in edit types dictionary
-                if edit_type in edit_types.get('change').get('edit_types').keys() and is_edit_type:
-                    edit_types['change']['edit_types'][edit_type] += 1
-                else:
-                    edit_types['change']['edit_types'][edit_type] = 0
+                if c['prev']['type'] == c['curr']['type']:
+                    text = c['curr']['text'].replace("\n", "\\n")
+                    is_edit_type_found,edit_type = is_change_in_edit_type(c['prev']['text'],c['curr']['text'],c['prev']['type'])
+                    #check if edit_type in edit types dictionary
                     if is_edit_type_found:
-                        edit_types['change']['edit_types'][edit_type] += 1
+                        if edit_types.get(edit_type,{}):
+                            edit_types[edit_type]['change'] = edit_types[edit_type].get('change', 0) + 1
+                        else:
+                            edit_types[edit_type] = {'change':1}
 
     return edit_types
