@@ -59,8 +59,10 @@ def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
                 return True, 'Template'
 
         if node_type == 'Wikilink':
-            prev_filtered_wikilink = prev_parsed_text.filter_wikilinks()[0]
-            curr_filtered_wikilink = curr_parsed_text.filter_wikilinks()[0]
+            # TODO: this used to be just the first link, but that triggered later errors in .copy and filterLinksByNS.
+            #  Revisit if just keep the first link or not
+            prev_filtered_wikilink = prev_parsed_text.filter_wikilinks()
+            curr_filtered_wikilink = curr_parsed_text.filter_wikilinks()
 
             #Check if wikilink that is not image or category changes
             prev_wikilink_copy = prev_filtered_wikilink.copy()
