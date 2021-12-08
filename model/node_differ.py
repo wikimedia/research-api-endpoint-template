@@ -139,7 +139,7 @@ def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
 
     if node_type == 'Comment':
         prev_filtered_comments = prev_parsed_text.filter_comments()[0]
-        curr_filtered_comments = curr.parsed_text.filter_comments()[0]
+        curr_filtered_comments = curr_parsed_text.filter_comments()[0]
         
         if prev_filtered_comments.contents != curr_filtered_comments.contents:
             return True, 'Comment'
@@ -233,8 +233,7 @@ def is_edit_type(wikitext, node_type):
         external_link = parsed_text.filter_external_links()
         if len(external_link) > 0:
             return True, external_link[0], 'External Link'
-    else:
-        return False, None, None
+    return False, None, None
 
 
 def get_diff_count(result):
