@@ -116,8 +116,8 @@ def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
                 return True, 'Reference'
 
             #Check if a table changes
-            prev_filtered_table = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
-            curr_filtered_table = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
+            prev_filtered_table = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "table")[0]
+            curr_filtered_table = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "table")[0]
 
             if prev_filtered_table.contents != curr_filtered_table.contents:
                 return True, 'Table'
@@ -188,7 +188,7 @@ def is_edit_type(wikitext, node_type):
         if len(ref) > 0:
             return True, ref[0], 'Reference'
         # Check if edit type is a table
-        table = parsed_text.filter_tags(matches=lambda node: node.tag == "tables")
+        table = parsed_text.filter_tags(matches=lambda node: node.tag == "table")
         if len(table) > 0:
             return True, table[0], 'Table'
 
