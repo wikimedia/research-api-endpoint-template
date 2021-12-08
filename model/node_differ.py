@@ -46,111 +46,114 @@ def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
     tuple
         Tuple containing the bool and edit type
     """
-    prev_parsed_text = mw.parse(prev_wikitext)
-    curr_parsed_text = mw.parse(curr_wikitext)
+    try:
+        prev_parsed_text = mw.parse(prev_wikitext)
+        curr_parsed_text = mw.parse(curr_wikitext)
 
-    if node_type == 'Template':
-        prev_temp_dict = { temp.split('=')[0].strip():temp.split('=')[1] for temp in prev_parsed_text.filter_templates(recursive=False)[0].params}
-        curr_temp_dict = { temp.split('=')[0].strip():temp.split('=')[1] for temp in curr_parsed_text.filter_templates(recursive=False)[0].params}
+        if node_type == 'Template':
+            prev_temp_dict = { temp.split('=')[0].strip():temp.split('=')[1] for temp in prev_parsed_text.filter_templates(recursive=False)[0].params}
+            curr_temp_dict = { temp.split('=')[0].strip():temp.split('=')[1] for temp in curr_parsed_text.filter_templates(recursive=False)[0].params}
 
-        #Get the difference between template parameters. If it is more than 0, then a change occured
-        if len(set(curr_temp_dict.items()) - set(prev_temp_dict.items())) > 0:
-            return True, 'Template'
+            #Get the difference between template parameters. If it is more than 0, then a change occured
+            if len(set(curr_temp_dict.items()) - set(prev_temp_dict.items())) > 0:
+                return True, 'Template'
 
-    if node_type == 'Wikilink':
-        prev_filtered_wikilink = prev_parsed_text.filter_wikilinks()[0]
-        curr_filtered_wikilink = curr_parsed_text.filter_wikilinks()[0]
+        if node_type == 'Wikilink':
+            prev_filtered_wikilink = prev_parsed_text.filter_wikilinks()[0]
+            curr_filtered_wikilink = curr_parsed_text.filter_wikilinks()[0]
 
-        #Check if wikilink that is not image or category changes
-        prev_wikilink_copy = prev_filtered_wikilink.copy()
-        curr_wikilink_copy = curr_filtered_wikilink.copy()
+            #Check if wikilink that is not image or category changes
+            prev_wikilink_copy = prev_filtered_wikilink.copy()
+            curr_wikilink_copy = curr_filtered_wikilink.copy()
 
-        prev_wikilink = filterLinksByNs(prev_wikilink_copy, [0])
-        curr_wikilink = filterLinksByNs(curr_wikilink_copy, [0])
+            prev_wikilink = filterLinksByNs(prev_wikilink_copy, [0])
+            curr_wikilink = filterLinksByNs(curr_wikilink_copy, [0])
 
-        if len(prev_wikilink) > 0 and len(curr_wikilink) > 0:
-            if prev_wikilink[0].text != curr_wikilink[0].text or \
-                prev_wikilink[0].title != curr_wikilink[0].title:
-                return True, 'Wikilink'
+            if len(prev_wikilink) > 0 and len(curr_wikilink) > 0:
+                if prev_wikilink[0].text != curr_wikilink[0].text or \
+                    prev_wikilink[0].title != curr_wikilink[0].title:
+                    return True, 'Wikilink'
 
-         #Check if category changes
-        prev_cat_copy = prev_filtered_wikilink.copy()
-        curr_cat_copy = curr_filtered_wikilink.copy()
+             #Check if category changes
+            prev_cat_copy = prev_filtered_wikilink.copy()
+            curr_cat_copy = curr_filtered_wikilink.copy()
 
-        prev_cat = filterLinksByNs(prev_cat_copy, [14])
-        curr_cat = filterLinksByNs(curr_cat_copy, [14])
+            prev_cat = filterLinksByNs(prev_cat_copy, [14])
+            curr_cat = filterLinksByNs(curr_cat_copy, [14])
 
-        if len(prev_cat) > 0 and len(curr_cat) > 0:
-            if prev_cat[0].text != curr_cat[0].text or \
-                prev_cat[0].title != curr_cat[0].title:
-                return True, 'Category'
+            if len(prev_cat) > 0 and len(curr_cat) > 0:
+                if prev_cat[0].text != curr_cat[0].text or \
+                    prev_cat[0].title != curr_cat[0].title:
+                    return True, 'Category'
 
-         #Check if image changes
-        prev_image_copy = prev_filtered_wikilink.copy()
-        curr_image_copy = prev_filtered_wikilink.copy()
+             #Check if image changes
+            prev_image_copy = prev_filtered_wikilink.copy()
+            curr_image_copy = prev_filtered_wikilink.copy()
 
-        prev_image = filterLinksByNs(prev_image_copy, [6])
-        curr_image = filterLinksByNs(curr_image_copy, [6])
+            prev_image = filterLinksByNs(prev_image_copy, [6])
+            curr_image = filterLinksByNs(curr_image_copy, [6])
 
-        if len(prev_image) > 0 and len(curr_image) > 0:
-            if prev_image[0].text != curr_image[0].text or \
-                prev_image[0].title != curr_image[0].title:
-                return True, 'Image'
+            if len(prev_image) > 0 and len(curr_image) > 0:
+                if prev_image[0].text != curr_image[0].text or \
+                    prev_image[0].title != curr_image[0].title:
+                    return True, 'Image'
 
-    if node_type == 'Text':
-        prev_filtered_text = prev_parsed_text.filter_text()[0]
-        curr_filtered_text = curr_parsed_text.filter_text()[0]
+        if node_type == 'Text':
+            prev_filtered_text = prev_parsed_text.filter_text()[0]
+            curr_filtered_text = curr_parsed_text.filter_text()[0]
 
-        if prev_filtered_text.value != curr_filtered_text.value:
-            return True, 'Text'
+            if prev_filtered_text.value != curr_filtered_text.value:
+                return True, 'Text'
 
-    if node_type == 'Tag':
-        #Check if a reference changes
-        prev_filtered_ref = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
-        curr_filtered_ref = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
+        if node_type == 'Tag':
+            #Check if a reference changes
+            prev_filtered_ref = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
+            curr_filtered_ref = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
 
-        if prev_filtered_ref.contents != curr_filtered_ref.contents:
-            return True, 'Reference'
+            if prev_filtered_ref.contents != curr_filtered_ref.contents:
+                return True, 'Reference'
 
-        #Check if a table changes
-        prev_filtered_table = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
-        curr_filtered_table = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
+            #Check if a table changes
+            prev_filtered_table = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
+            curr_filtered_table = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "tables")[0]
 
-        if prev_filtered_table.contents != curr_filtered_table.contents:
-            return True, 'Table'
+            if prev_filtered_table.contents != curr_filtered_table.contents:
+                return True, 'Table'
 
-        #Check if a text format chnages
-        prev_filtered_text_formatting = prev_parsed_text.filter_tags()[0]
-        prev_filtered_text_formatting = re.findall("'{2}.*''", str(prev_filtered_text_formatting[0]))[0]
-        
-        curr_filtered_text_formatting = curr_parsed_text.filter_tags()[0]
-        curr_filtered_text_formatting = re.findall("'{2}.*''", str(curr_filtered_text_formatting[0]))[0]
+            #Check if a text format chnages
+            prev_filtered_text_formatting = prev_parsed_text.filter_tags()[0]
+            prev_filtered_text_formatting = re.findall("'{2}.*''", str(prev_filtered_text_formatting[0]))[0]
 
-        if prev_filtered_text_formatting != curr_filtered_text_formatting:
-            return True, 'Text Formatting'
+            curr_filtered_text_formatting = curr_parsed_text.filter_tags()[0]
+            curr_filtered_text_formatting = re.findall("'{2}.*''", str(curr_filtered_text_formatting[0]))[0]
+
+            if prev_filtered_text_formatting != curr_filtered_text_formatting:
+                return True, 'Text Formatting'
 
 
-    if node_type == 'Heading':
-        prev_filtered_section = prev_parsed_text.filter_heading()[0]
-        curr_filtered_section = curr_parsed_text.filter_heading()[0]
+        if node_type == 'Heading':
+            prev_filtered_section = prev_parsed_text.filter_heading()[0]
+            curr_filtered_section = curr_parsed_text.filter_heading()[0]
 
-        if prev_filtered_section.title != curr_filtered_section.title:
-            return True, 'Heading'
+            if prev_filtered_section.title != curr_filtered_section.title:
+                return True, 'Heading'
 
-    if node_type == 'Comment':
-        prev_filtered_comments = prev_parsed_text.filter_comments()[0]
-        curr_filtered_comments = curr_parsed_text.filter_comments()[0]
-        
-        if prev_filtered_comments.contents != curr_filtered_comments.contents:
-            return True, 'Comment'
+        if node_type == 'Comment':
+            prev_filtered_comments = prev_parsed_text.filter_comments()[0]
+            curr_filtered_comments = curr_parsed_text.filter_comments()[0]
 
-    if node_type == 'ExternalLink':
-        prev_filtered_external_links = prev_parsed_text.filter_external_links()[0]
-        curr_filtered_external_links = curr_parsed_text.filter_external_links()[0]
+            if prev_filtered_comments.contents != curr_filtered_comments.contents:
+                return True, 'Comment'
 
-        if prev_filtered_external_links.title != curr_filtered_external_links.title or \
-            prev_filtered_external_links.url != curr_filtered_external_links.url:
-            return True, 'ExternalLink'
+        if node_type == 'ExternalLink':
+            prev_filtered_external_links = prev_parsed_text.filter_external_links()[0]
+            curr_filtered_external_links = curr_parsed_text.filter_external_links()[0]
+
+            if prev_filtered_external_links.title != curr_filtered_external_links.title or \
+                prev_filtered_external_links.url != curr_filtered_external_links.url:
+                return True, 'ExternalLink'
+    except Exception:
+        pass
 
     return False, None
 
