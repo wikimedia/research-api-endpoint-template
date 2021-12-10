@@ -61,8 +61,8 @@ def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
         if node_type == 'Wikilink':
             # TODO: this used to be just the first link, but that triggered later errors in .copy and filterLinksByNS.
             #  Revisit if just keep the first link or not
-            prev_filtered_wikilink = prev_parsed_text.filter_wikilinks()
-            curr_filtered_wikilink = curr_parsed_text.filter_wikilinks()
+            prev_filtered_wikilink = prev_parsed_text.filter_wikilinks(recursive=False)
+            curr_filtered_wikilink = curr_parsed_text.filter_wikilinks(recursive=False)
 
             #Check if wikilink that is not image or category changes
             prev_wikilink_copy = prev_filtered_wikilink.copy()
@@ -101,32 +101,32 @@ def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
                     return True, 'Image'
 
         if node_type == 'Text':
-            prev_filtered_text = prev_parsed_text.filter_text()[0]
-            curr_filtered_text = curr_parsed_text.filter_text()[0]
+            prev_filtered_text = prev_parsed_text.filter_text(recursive=False)[0]
+            curr_filtered_text = curr_parsed_text.filter_text(recursive=False)[0]
 
             if prev_filtered_text.value != curr_filtered_text.value:
                 return True, 'Text'
 
         if node_type == 'Tag':
             #Check if a reference changes
-            prev_filtered_ref = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
-            curr_filtered_ref = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "ref")[0]
+            prev_filtered_ref = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "ref",recursive=False)[0]
+            curr_filtered_ref = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "ref",recursive=False)[0]
 
             if prev_filtered_ref.contents != curr_filtered_ref.contents:
                 return True, 'Reference'
 
             #Check if a table changes
-            prev_filtered_table = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "table")[0]
-            curr_filtered_table = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "table")[0]
+            prev_filtered_table = prev_parsed_text.filter_tags(matches=lambda node: node.tag == "table",recursive=False)[0]
+            curr_filtered_table = curr_parsed_text.filter_tags(matches=lambda node: node.tag == "table",recursive=False)[0]
 
             if prev_filtered_table.contents != curr_filtered_table.contents:
                 return True, 'Table'
 
             #Check if a text format chnages
-            prev_filtered_text_formatting = prev_parsed_text.filter_tags()[0]
+            prev_filtered_text_formatting = prev_parsed_text.filter_tags(recursive=False)[0]
             prev_filtered_text_formatting = re.findall("'{2}.*''", str(prev_filtered_text_formatting[0]))[0]
 
-            curr_filtered_text_formatting = curr_parsed_text.filter_tags()[0]
+            curr_filtered_text_formatting = curr_parsed_text.filter_tags(recursive=False)[0]
             curr_filtered_text_formatting = re.findall("'{2}.*''", str(curr_filtered_text_formatting[0]))[0]
 
             if prev_filtered_text_formatting != curr_filtered_text_formatting:
@@ -134,22 +134,22 @@ def is_change_in_edit_type(prev_wikitext,curr_wikitext,node_type):
 
 
         if node_type == 'Heading':
-            prev_filtered_section = prev_parsed_text.filter_heading()[0]
-            curr_filtered_section = curr_parsed_text.filter_heading()[0]
+            prev_filtered_section = prev_parsed_text.filter_heading(recursive=False)[0]
+            curr_filtered_section = curr_parsed_text.filter_heading(recursive=False)[0]
 
             if prev_filtered_section.title != curr_filtered_section.title:
                 return True, 'Heading'
 
         if node_type == 'Comment':
-            prev_filtered_comments = prev_parsed_text.filter_comments()[0]
-            curr_filtered_comments = curr_parsed_text.filter_comments()[0]
+            prev_filtered_comments = prev_parsed_text.filter_comments(recursive=False)[0]
+            curr_filtered_comments = curr_parsed_text.filter_comments(recursive=False)[0]
 
             if prev_filtered_comments.contents != curr_filtered_comments.contents:
                 return True, 'Comment'
 
         if node_type == 'ExternalLink':
-            prev_filtered_external_links = prev_parsed_text.filter_external_links()[0]
-            curr_filtered_external_links = curr_parsed_text.filter_external_links()[0]
+            prev_filtered_external_links = prev_parsed_text.filter_external_links(recursive=False)[0]
+            curr_filtered_external_links = curr_parsed_text.filter_external_links(recursive=False)[0]
 
             if prev_filtered_external_links.title != curr_filtered_external_links.title or \
                 prev_filtered_external_links.url != curr_filtered_external_links.url:
@@ -177,44 +177,44 @@ def is_edit_type(wikitext, node_type):
     parsed_text = mw.parse(wikitext)
     # If type field is Text
     if node_type == 'Text':
-        text = parsed_text.filter_text()
+        text = parsed_text.filter_text(recursive=False)
         if len(text) > 0:
             return True, text[0], 'Text'
 
 
     elif node_type == 'Tag':
         # Check if edit type is a reference
-        ref = parsed_text.filter_tags(matches=lambda node: node.tag == "ref")
+        ref = parsed_text.filter_tags(matches=lambda node: node.tag == "ref",recursive=False)
         if len(ref) > 0:
             return True, ref[0], 'Reference'
         # Check if edit type is a table
-        table = parsed_text.filter_tags(matches=lambda node: node.tag == "table")
+        table = parsed_text.filter_tags(matches=lambda node: node.tag == "table",recursive=False)
         if len(table) > 0:
             return True, table[0], 'Table'
 
         # Check if edit type is a text formatting
-        text_format = parsed_text.filter_tags()
+        text_format = parsed_text.filter_tags(recursive=False)
         text_format = re.findall("'{2}.*''", str(text_format[0]))
         if len(text_format) > 0:
             return True, text_format[0], 'Text Formatting'
 
     elif node_type == 'Comment':
-        comments = parsed_text.filter_comments()
+        comments = parsed_text.filter_comments(recursive=False)
         if len(comments) > 0:
             return True, comments[0], 'Comment'
 
     elif node_type == 'Template':
-        templates = parsed_text.filter_templates()
+        templates = parsed_text.filter_templates(recursive=False)
         if len(templates) > 0:
             return True, templates[0], 'Template'
 
     elif node_type == 'Heading':
-        section = parsed_text.filter_heading()
+        section = parsed_text.filter_heading(recursive=False)
         if len(section) > 0:
             return True, section[0], 'Section'
 
     elif node_type == 'Wikilink':
-        link = parsed_text.filter_wikilinks()
+        link = parsed_text.filter_wikilinks(recursive=False)
         # Check if edit type is a category or image or inlink
         if len(link) > 0:
             # Get copy of list
@@ -235,7 +235,7 @@ def is_edit_type(wikitext, node_type):
                 return True, wikilink[0], 'Wikilink'
 
     elif node_type == 'ExternalLink':
-        external_link = parsed_text.filter_external_links()
+        external_link = parsed_text.filter_external_links(recursive=False)
         if len(external_link) > 0:
             return True, external_link[0], 'External Link'
     return False, None, None
@@ -265,7 +265,7 @@ def get_diff_count(result):
     for s in sections_affected:
         for r in result['remove']:
             if r["section"] == s:
-                text = r['text'].replace("\n", "\\n")
+                text = r['text']
                 is_edit_type_found,wikitext,edit_type = is_edit_type(text,r['type'])
                 if is_edit_type_found:
                     if edit_types.get(edit_type,{}):
@@ -275,7 +275,7 @@ def get_diff_count(result):
 
         for i in result['insert']:
             if i["section"] == s:
-                text = i['text'].replace("\n", "\\n")
+                text = i['text']
                 is_edit_type_found,wikitext,edit_type = is_edit_type(text,i['type'])
                 #check if edit_type in edit types dictionary
                 if is_edit_type_found:
@@ -288,7 +288,7 @@ def get_diff_count(result):
             
             if c["prev"]["section"] == s:
                 if c['prev']['type'] == c['curr']['type']:
-                    text = c['curr']['text'].replace("\n", "\\n")
+                    text = c['curr']['text']
                     is_edit_type_found,edit_type = is_change_in_edit_type(c['prev']['text'],c['curr']['text'],c['prev']['type'])
                     #check if edit_type in edit types dictionary
                     if is_edit_type_found:
