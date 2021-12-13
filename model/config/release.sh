@@ -33,15 +33,15 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 echo "Downloading differ libraries, hang on..."
 cd ${TMP_PATH}
 wget -O tree_differ.py ${TD_WGET}
-#wget -O node_differ.py ${ND_WGET}
+wget -O node_differ.py ${ND_WGET}
 mv tree_differ.py ${ETC_PATH}
-#mv node_differ.py ${ETC_PATH}
+mv node_differ.py ${ETC_PATH}
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${REPO_LBL}/model/config/* ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/wsgi.py ${ETC_PATH}
-#cp ${TMP_PATH}/${REPO_LBL}/model/tree_differ.py ${ETC_PATH}
+cp ${TMP_PATH}/${REPO_LBL}/model/tree_differ.py ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/node_differ.py ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/flask_config.yaml ${ETC_PATH}
 cp ${ETC_PATH}/model.nginx /etc/nginx/sites-available/model
