@@ -96,18 +96,16 @@ def get_diff(lang, revid, title, session=None):
     )
     formatted_diff = None
     try:
+        curr_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
+    except IndexError:
+        return None  # seems some sort of API error; just fail at this point
+    try:
         prev_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
     except IndexError:
-        prev_wikitext = ""
+        prev_wikitext = ""  # current revision probaby is first page revision
+
     try:
-        curr_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
-        t1, sections1 = td.sec_node_tree(mwparserfromhell.parse(prev_wikitext))
-        t2, sections2 = td.sec_node_tree(mwparserfromhell.parse(curr_wikitext))
-        d = td.Differ(t1, t2)
-        diff = d.get_corresponding_nodes()
-        td.detect_moves(diff)
-        formatted_diff = td.format_result(diff, sections1, sections2)
-        td.merge_text_changes(formatted_diff, sections1, sections2)
+        formatted_diff = td.get_diff(prev_wikitext, curr_wikitext)
     except Exception:
         traceback.print_exc()
         pass
