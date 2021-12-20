@@ -81,7 +81,7 @@ def get_diff(lang, revid, title, session=None):
         session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
 
     # generate wikitext for revision and previous
-    # https://en.wikipedia.org/w/api.php?action=query&prop=revisions&titles=Eve%20Ewing&rvlimit=2&rvdir=older&rvstartid=979988715&rvprop=&format=json&formatversion=2&rvslots=*
+    # https://en.wikipedia.org/w/api.php?action=query&prop=revisions&titles=Eve%20Ewing&rvlimit=2&rvdir=older&rvstartid=979988715&rvprop=ids|content|comment&format=json&formatversion=2&rvslots=*
     result = session.get(
         action="query",
         prop="revisions",
@@ -96,8 +96,11 @@ def get_diff(lang, revid, title, session=None):
     )
     formatted_diff = None
     try:
-        curr_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
         prev_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
+    except IndexError:
+        prev_wikitext = ""
+    try:
+        curr_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
         t1, sections1 = td.sec_node_tree(mwparserfromhell.parse(prev_wikitext))
         t2, sections2 = td.sec_node_tree(mwparserfromhell.parse(curr_wikitext))
         d = td.Differ(t1, t2)
