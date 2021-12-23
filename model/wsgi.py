@@ -105,7 +105,7 @@ def get_diff(lang, revid, title, session=None):
         prev_wikitext = ""  # current revision probaby is first page revision
 
     try:
-        formatted_diff = td.get_diff(prev_wikitext, curr_wikitext)
+        formatted_diff = td.get_diff(prev_wikitext, curr_wikitext, lang=lang)
     except Exception:
         traceback.print_exc()
         pass
