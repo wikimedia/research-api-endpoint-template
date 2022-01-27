@@ -3,11 +3,9 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='edit-types'  # directory where repo code will go
+REPO_LBL='media-changes'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-GIT_BRANCH='edit-types'
-TD_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tree_differ.py'
-ND_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/node_differ.py'
+GIT_BRANCH='media-changes'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -29,13 +27,6 @@ source ${LIB_PATH}/p3env/bin/activate
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
-
-echo "Downloading differ libraries, hang on..."
-cd ${TMP_PATH}
-wget -O tree_differ.py ${TD_WGET}
-wget -O node_differ.py ${ND_WGET}
-mv tree_differ.py ${ETC_PATH}
-mv node_differ.py ${ETC_PATH}
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."

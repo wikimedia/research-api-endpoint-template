@@ -1,7 +1,5 @@
-anytree
 Flask
 Flask-Cors
 mwapi
-mwparserfromhell
 PyYAML
 uWSGI
