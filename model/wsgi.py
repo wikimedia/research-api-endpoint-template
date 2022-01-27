@@ -330,7 +330,7 @@ def get_media(wikitext, lang='en', max_link_length=240):
     except Exception:
         return None
 
-def compare_media_lists(curr_media, prev_media):
+def compare_media_lists(prev_media, curr_media):
     """Compare two media lists to determine what changed."""
     try:
         changes = {}
