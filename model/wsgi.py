@@ -286,7 +286,7 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 @app.route('/api/v1/media-list', methods=['GET'])
-def media_changes():
+def media_list():
     return process_diff(rvlimit=1)
 
 @app.route('/api/v1/media-changes', methods=['GET'])
