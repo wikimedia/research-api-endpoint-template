@@ -275,7 +275,7 @@ AUDIO_EXTENSIONS = ['.ogg', '.mp3', '.mid', '.webm', '.flac', '.wav']
 MEDIA_EXTENSIONS = list(set(IMAGE_EXTENSIONS + VIDEO_EXTENSIONS + AUDIO_EXTENSIONS))
 
 exten_regex = ('(' + '|'.join([e + '\\b' for e in MEDIA_EXTENSIONS]) + ')').replace('.', '\.')
-EXTENSION_PATTERN = re.compile(f'([\w ,\(\)\.-]+){exten_regex}', flags=re.UNICODE)
+EXTENSION_PATTERN = re.compile(f'([\w ,\(\)\.&-]+){exten_regex}', flags=re.UNICODE)
 BRACKET_PATTERN = re.compile('(?<=\[\[)(.*?)(?=\]\])', flags=re.DOTALL)
 
 # load in app user-agent or any other app config
@@ -285,6 +285,20 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
+@app.route('/api/v1/media-list', methods=['GET'])
+def media_list():
+    """Stable API endpoint used by interface for getting edit types."""
+    lang, revid, title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'error': error})
+    else:
+        _, curr_wt = get_wikitext(lang, revid, title, rvlimit=1)  # set to None if placeholder
+        curr_media = get_media(curr_wt, lang)
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
+                  'results': curr_media
+                  }
+        return jsonify(result)
+
 @app.route('/api/v1/media-changes', methods=['GET'])
 def process_diff():
     """Stable API endpoint used by interface for getting edit types."""
@@ -292,7 +306,7 @@ def process_diff():
     if error is not None:
         return jsonify({'error': error})
     else:
-        prev_wt, curr_wt = get_wikitext(lang, revid, title)  # set to None if placeholder
+        prev_wt, curr_wt = get_wikitext(lang, revid, title, rvlimit=2)  # set to None if placeholder
         prev_media = get_media(prev_wt, lang)
         curr_media = get_media(curr_wt, lang)
         media_changes = compare_media_lists(prev_media, curr_media)
@@ -344,7 +358,7 @@ def compare_media_lists(prev_media, curr_media):
     except Exception:
         return None
 
-def get_wikitext(lang, revid, title, session=None):
+def get_wikitext(lang, revid, title, rvlimit=2, session=None):
     """Gather set of up to `limit` outlinks for an article."""
     if session is None:
         session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
@@ -355,7 +369,7 @@ def get_wikitext(lang, revid, title, session=None):
         action="query",
         prop="revisions",
         titles=title,
-        rvlimit=2,
+        rvlimit=rvlimit,
         rvdir="older",
         rvstartid=revid,
         rvprop="ids|content|comment",
