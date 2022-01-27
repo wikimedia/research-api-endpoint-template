@@ -451,6 +451,7 @@ def validate_api_args():
             error = 'No lang provided. Please provide both -- e.g., "...?lang=en&title=Modern_art'
         else:
             lang = request.args['lang']
+            title = request.args['title']
             if not validate_lang(lang):
                 error = f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"
 
