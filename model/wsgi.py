@@ -286,27 +286,20 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 @app.route('/api/v1/media-list', methods=['GET'])
-def media_list():
-    """Stable API endpoint used by interface for getting edit types."""
-    lang, revid, title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
-    else:
-        _, curr_wt = get_wikitext(lang, revid, title, rvlimit=1)  # set to None if placeholder
-        curr_media = get_media(curr_wt, lang)
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'results': curr_media
-                  }
-        return jsonify(result)
+def media_changes():
+    return process_diff(rvlimit=1)
 
 @app.route('/api/v1/media-changes', methods=['GET'])
-def process_diff():
+def media_changes():
+    return process_diff(rvlimit=2)
+
+def process_diff(rvlimit=2):
     """Stable API endpoint used by interface for getting edit types."""
     lang, revid, title, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
     else:
-        prev_wt, curr_wt = get_wikitext(lang, revid, title, rvlimit=2)  # set to None if placeholder
+        prev_wt, curr_wt = get_wikitext(lang, revid, title, rvlimit=rvlimit)  # set to None if placeholder
         prev_media = get_media(prev_wt, lang)
         curr_media = get_media(curr_wt, lang)
         media_changes = compare_media_lists(prev_media, curr_media)
@@ -365,18 +358,31 @@ def get_wikitext(lang, revid, title, rvlimit=2, session=None):
 
     # generate wikitext for revision and previous
     # https://en.wikipedia.org/w/api.php?action=query&prop=revisions&titles=Eve%20Ewing&rvlimit=2&rvdir=older&rvstartid=979988715&rvprop=ids|content|comment&format=json&formatversion=2&rvslots=*
-    result = session.get(
-        action="query",
-        prop="revisions",
-        titles=title,
-        rvlimit=rvlimit,
-        rvdir="older",
-        rvstartid=revid,
-        rvprop="ids|content|comment",
-        rvslots="*",
-        format='json',
-        formatversion=2,
-    )
+    if revid is not None:
+        result = session.get(
+            action="query",
+            prop="revisions",
+            titles=title,
+            rvlimit=rvlimit,
+            rvdir="older",
+            rvstartid=revid,
+            rvprop="ids|content|comment",
+            rvslots="*",
+            format='json',
+            formatversion=2,
+        )
+    else:
+        result = session.get(
+            action="query",
+            prop="revisions",
+            titles=title,
+            rvlimit=rvlimit,
+            rvdir="older",
+            rvprop="ids|content|comment",
+            rvslots="*",
+            format='json',
+            formatversion=2,
+        )
     try:
         curr_wikitext = result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
     except IndexError:
@@ -425,20 +431,28 @@ def validate_api_args():
     lang = None
     revid = None
     title = None
-    if not request.args.get('lang') and not request.args.get('revid'):
-        error = 'No lang or revid provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
-    elif not request.args.get('lang'):
-        error = 'No lang provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
-    elif not request.args.get('revid'):
-        error = 'No revid provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
+    if not request.args.get('title'):
+        if not request.args.get('lang') and not request.args.get('revid'):
+            error = 'No lang or revid provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
+        elif not request.args.get('lang'):
+            error = 'No lang provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
+        elif not request.args.get('revid'):
+            error = 'No revid provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
+        else:
+            lang = request.args['lang']
+            if not validate_lang(lang):
+                error = f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"
+            revid = request.args['revid']
+            if not validate_revid(revid):
+                error = f"{revid} is not a valid revision ID -- e.g., 979988715 for https://en.wikipedia.org/w/index.php?oldid=979988715"
+            title = get_page_title(lang, revid)
     else:
-        lang = request.args['lang']
-        if not validate_lang(lang):
-            error = f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"
-        revid = request.args['revid']
-        if not validate_revid(revid):
-            error = f"{revid} is not a valid revision ID -- e.g., 979988715 for https://en.wikipedia.org/w/index.php?oldid=979988715"
-        title = get_page_title(lang, revid)
+        if not request.args.get('lang'):
+            error = 'No lang provided. Please provide both -- e.g., "...?lang=en&title=Modern_art'
+        else:
+            lang = request.args['lang']
+            if not validate_lang(lang):
+                error = f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"
 
     return lang, revid, title, error
 
