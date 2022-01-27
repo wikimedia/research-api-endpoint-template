@@ -303,7 +303,11 @@ def process_diff(rvlimit=2):
         prev_media = get_media(prev_wt, lang)
         curr_media = get_media(curr_wt, lang)
         media_changes = compare_media_lists(prev_media, curr_media)
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
+        if revid is None:
+            article = f'https://{lang}.wikipedia.org/wiki/{title}'
+        else:
+            article = f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'
+        result = {'article': article,
                   'results': media_changes
                   }
         return jsonify(result)
