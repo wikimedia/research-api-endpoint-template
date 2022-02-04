@@ -3,7 +3,7 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='edit-types'  # directory where repo code will go
+REPO_LBL='media-changes'  # directory where repo code will go
 MODEL_WGET='https://ndownloader.figshare.com/files/<file-number>'
 FILE_NAME='file-name.ext'
 
