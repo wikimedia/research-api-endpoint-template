@@ -685,7 +685,7 @@ def wikitext_to_features(wikitext, lang='en', level=3):
         media_bra = [l.split(':', maxsplit=1)[1] for l in links if l.split(':', maxsplit=1)[0] in med_prefixes]
         media_ext = [''.join(m).strip() for m in EXTEN_PATTERN.findall(wikitext) if len(m[0]) <= 240]
         media = len(set(media_bra).union(set(media_ext)))
-        wikilinks = len(links) - categories - media
+        wikilinks = len(links) - categories - media_bra
         headings = len([1 for l in re.findall('(={2,})(.*?)(={2,})', wikitext) if len(l[0]) <= level])
 
         return (page_length, refs, wikilinks, categories, media, headings)
