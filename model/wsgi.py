@@ -9,7 +9,7 @@ import yaml
 
 __dir__ = os.path.dirname(__file__)
 
-sys.path.append(os.path.join(__dir__), 'edittypes')
+sys.path.append(os.path.join(__dir__, 'edittypes'))
 import tree_differ as td
 import node_differ as nd
 
