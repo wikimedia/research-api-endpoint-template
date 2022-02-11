@@ -38,7 +38,9 @@ wget -O tree_differ.py ${TD_WGET}
 wget -O node_differ.py ${ND_WGET}
 wget -O constants.py ${CON_WGET}
 wget -O tokenizer.py ${TOK_WGET}
-echo > __init__.py
+echo "import os" > __init__.py
+echo "import sys" >> __init__.py
+echo "sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))" >> __init__.py
 mv tree_differ.py ${ETC_PATH}/edittypes/
 mv node_differ.py ${ETC_PATH}/edittypes/
 mv constants.py ${ETC_PATH}/edittypes/

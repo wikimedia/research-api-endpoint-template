@@ -2,7 +2,7 @@ import os
 import sys
 import traceback
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mwapi
 import yaml
@@ -104,7 +104,7 @@ def get_diff(lang, revid, title, session=None):
         prev_wikitext = ""  # current revision probaby is first page revision
 
     try:
-        formatted_diff = td.get_diff(prev_wikitext, curr_wikitext, lang=lang)
+        formatted_diff = td.get_diff(prev_wikitext, curr_wikitext, lang=lang, timeout=5)
     except Exception:
         traceback.print_exc()
         pass
