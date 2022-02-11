@@ -8,6 +8,8 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 GIT_BRANCH='edit-types'
 TD_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tree_differ.py'
 ND_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/node_differ.py'
+CON_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/constants.py'
+TOK_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tokenizer.py'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -34,8 +36,14 @@ echo "Downloading differ libraries, hang on..."
 cd ${TMP_PATH}
 wget -O tree_differ.py ${TD_WGET}
 wget -O node_differ.py ${ND_WGET}
-mv tree_differ.py ${ETC_PATH}
-mv node_differ.py ${ETC_PATH}
+wget -O constants.py ${CON_WGET}
+wget -O tokenizer.py ${TOK_WGET}
+echo > __init__.py
+mv tree_differ.py ${ETC_PATH}/edittypes/
+mv node_differ.py ${ETC_PATH}/edittypes/
+mv constants.py ${ETC_PATH}/edittypes/
+mv tokenizer.py ${ETC_PATH}/edittypes/
+mv __init__.py ${ETC_PATH}/edittypes/
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."

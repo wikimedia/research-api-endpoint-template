@@ -5,12 +5,11 @@ import traceback
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import mwapi
-import mwparserfromhell
 import yaml
 
 __dir__ = os.path.dirname(__file__)
 
-sys.path.append(__dir__)
+sys.path.append(os.path.join(__dir__), 'edittypes')
 import tree_differ as td
 import node_differ as nd
 

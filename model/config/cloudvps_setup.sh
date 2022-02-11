@@ -10,6 +10,8 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
 TD_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tree_differ.py'
 ND_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/node_differ.py'
+CON_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/constants.py'
+TOK_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tokenizer.py'
 FILE_NAME='file-name.ext'
 GIT_BRANCH='edit-types'
 
@@ -38,6 +40,7 @@ mkdir -p ${TMP_PATH}
 mkdir -p ${SRV_PATH}/sock
 mkdir -p ${ETC_PATH}
 mkdir -p ${ETC_PATH}/resources
+mkdir -p ${ETC_PATH}/edittypes
 mkdir -p ${LOG_PATH}
 mkdir -p ${LIB_PATH}
 
@@ -56,8 +59,14 @@ echo "Downloading differ libraries, hang on..."
 cd ${TMP_PATH}
 wget -O tree_differ.py ${TD_WGET}
 wget -O node_differ.py ${ND_WGET}
-mv tree_differ.py ${ETC_PATH}
-mv node_differ.py ${ETC_PATH}
+wget -O constants.py ${CON_WGET}
+wget -O tokenizer.py ${TOK_WGET}
+echo > __init__.py
+mv tree_differ.py ${ETC_PATH}/edittypes/
+mv node_differ.py ${ETC_PATH}/edittypes/
+mv constants.py ${ETC_PATH}/edittypes/
+mv tokenizer.py ${ETC_PATH}/edittypes/
+mv __init__.py ${ETC_PATH}/edittypes/
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
