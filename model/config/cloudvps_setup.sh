@@ -5,14 +5,6 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='edit-types'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-# model binary / data -- ndownloader.figshare is a good host
-# alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
-# for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
-TD_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tree_differ.py'
-ND_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/node_differ.py'
-CON_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/constants.py'
-TOK_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tokenizer.py'
-FILE_NAME='file-name.ext'
 GIT_BRANCH='edit-types'
 
 # derived paths
@@ -54,21 +46,6 @@ git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
-
-echo "Downloading differ libraries, hang on..."
-cd ${TMP_PATH}
-wget -O tree_differ.py ${TD_WGET}
-wget -O node_differ.py ${ND_WGET}
-wget -O constants.py ${CON_WGET}
-wget -O tokenizer.py ${TOK_WGET}
-echo "import os" > __init__.py
-echo "import sys" >> __init__.py
-echo "sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))" >> __init__.py
-mv tree_differ.py ${ETC_PATH}/edittypes/
-mv node_differ.py ${ETC_PATH}/edittypes/
-mv constants.py ${ETC_PATH}/edittypes/
-mv tokenizer.py ${ETC_PATH}/edittypes/
-mv __init__.py ${ETC_PATH}/edittypes/
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}

@@ -2,6 +2,7 @@ anytree
 Flask
 Flask-Cors
 mwapi
+mwedittypes
 mwparserfromhell
 PyYAML
 uWSGI

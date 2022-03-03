@@ -1,22 +1,17 @@
 import os
-import sys
 import traceback
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from mwedittypes import EditTypes
 import mwapi
 import yaml
 
 __dir__ = os.path.dirname(__file__)
 
-sys.path.append(os.path.join(__dir__, 'edittypes'))
-import tree_differ as td
-import node_differ as nd
-
 app = Flask(__name__)
 
 WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
-EDIT_TYPES = ['fix grammar', 'fix spelling', 'wikilinks', 'images', 'categories', 'comment', 'formatting', 'references', 'facts', 'sections', 'alt-text', 'templates', 'external links', 'tables', 'restructure article', 'interwiki links', 'parser-arguments']
 
 # load in app user-agent or any other app config
 app.config.update(
@@ -25,56 +20,36 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-@app.route('/api/v1/actions', methods=['GET'])
-def process_diff():
-    """Stable API endpoint used by interface for getting edit types."""
-    lang, revid, title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
-    else:
-        tree_diff = get_diff(lang, revid, title)  # set to None if placeholder
-        actions = get_actions(tree_diff)  # set to placeholder as needed
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'results': actions
-                  }
-        return jsonify(result)
-
-def placeholder_get_actions(diff):
-    """Get predicted edit actions for a diff."""
-    return [{'action':e, 'count':0} for e in EDIT_TYPES]
-
-def get_actions(diff):
-    return nd.get_diff_count(diff)
-
 @app.route('/api/v1/full-diff', methods=['GET'])
+@app.route('/api/v1/actions', methods=['GET'])
 def full_diff():
     """Full version -- allow for testing API without breaking interface"""
     lang, revid, title, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
     else:
-        tree_diff = get_diff(lang, revid, title)
-        actions = get_actions(tree_diff)
+        differ = get_differ(lang, revid, title)
+        actions = differ.get_diff()
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': actions
                   }
         return jsonify(result)
 
 @app.route('/api/v1/diff', methods=['GET'])
-def just_the_diff():
+def tree_diff():
     """Stop at the tree-diff intermediate stage."""
     lang, revid, title, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
     else:
-        diff = get_diff(lang, revid, title)
+        differ = get_differ(lang, revid, title)
+        differ.get_diff()
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'diff': diff
+                  'diff': differ.tree_diff
                   }
         return jsonify(result)
 
-
-def get_diff(lang, revid, title, session=None):
+def get_differ(lang, revid, title, session=None):
     """Gather set of up to `limit` outlinks for an article."""
     if session is None:
         session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
@@ -93,22 +68,21 @@ def get_diff(lang, revid, title, session=None):
         format='json',
         formatversion=2,
     )
-    formatted_diff = None
+    differ = None
     try:
-        curr_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
+        curr_wikitext = result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
     except IndexError:
         return None  # seems some sort of API error; just fail at this point
     try:
-        prev_wikitext = "==Lede==" + result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
+        prev_wikitext = result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
     except IndexError:
         prev_wikitext = ""  # current revision probaby is first page revision
 
     try:
-        formatted_diff = td.get_diff(prev_wikitext, curr_wikitext, lang=lang, timeout=5)
+        differ = EditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=8)
     except Exception:
         traceback.print_exc()
-        pass
-    return formatted_diff
+    return differ
 
 def get_page_title(lang, revid, session=None):
     """Get page associated with a given revision ID"""

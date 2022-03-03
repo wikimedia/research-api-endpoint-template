@@ -6,10 +6,6 @@ APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='edit-types'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='edit-types'
-TD_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tree_differ.py'
-ND_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/node_differ.py'
-CON_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/constants.py'
-TOK_WGET='https://raw.githubusercontent.com/geohci/edit-types/main/edittypes/tokenizer.py'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -31,21 +27,6 @@ source ${LIB_PATH}/p3env/bin/activate
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
-
-echo "Downloading differ libraries, hang on..."
-cd ${TMP_PATH}
-wget -O tree_differ.py ${TD_WGET}
-wget -O node_differ.py ${ND_WGET}
-wget -O constants.py ${CON_WGET}
-wget -O tokenizer.py ${TOK_WGET}
-echo "import os" > __init__.py
-echo "import sys" >> __init__.py
-echo "sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))" >> __init__.py
-mv tree_differ.py ${ETC_PATH}/edittypes/
-mv node_differ.py ${ETC_PATH}/edittypes/
-mv constants.py ${ETC_PATH}/edittypes/
-mv tokenizer.py ${ETC_PATH}/edittypes/
-mv __init__.py ${ETC_PATH}/edittypes/
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."

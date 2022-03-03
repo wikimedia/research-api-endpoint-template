@@ -1,1 +1,0 @@
-# Current version of file: https://github.com/geohci/edit-types/blob/main/edittypes/node_differ.py
