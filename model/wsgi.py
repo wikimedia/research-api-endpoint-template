@@ -719,8 +719,8 @@ def get_quality(lang, title):
         wikilinks_x = min(1, math.sqrt(wikilinks) / MAX_QUAL_VALS[lang]['w'])
         print(length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x)
         quality = (COEF_LEN * length_x) + (COEF_MED * media_x) + (COEF_HEA * headings_x) + (COEF_REF * refs_x) + (COEF_LIN * wikilinks_x) + (COEF_CAT * categories_x)
-        return quality, {'raw':{'length':page_length, 'refs':refs, 'wikilinks':wikilinks, 'categories':categories, 'media':media, 'headings':headings},
-                         'features':{'len_x':length_x, 'ref_x':refs_x, 'link_x':wikilinks_x, 'cat_x':categories_x, 'med_x':media_x, 'head_x':headings_x}}
+        return quality, {'raw':{'length (bytes)':page_length, 'references':refs, 'wikilinks':wikilinks, 'categories':categories, 'media':media, 'headings':headings},
+                         'normalized':{'length (bytes)':length_x, 'references':refs_x, 'wikilinks':wikilinks_x, 'categories':categories_x, 'media':media_x, 'headings':headings_x}}
     except Exception:
         traceback.print_exc()
         return 0
