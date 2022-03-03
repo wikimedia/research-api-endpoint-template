@@ -32,7 +32,6 @@ mkdir -p ${TMP_PATH}
 mkdir -p ${SRV_PATH}/sock
 mkdir -p ${ETC_PATH}
 mkdir -p ${ETC_PATH}/resources
-mkdir -p ${ETC_PATH}/edittypes
 mkdir -p ${LOG_PATH}
 mkdir -p ${LIB_PATH}
 
