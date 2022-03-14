@@ -28,7 +28,7 @@ def full_diff():
     if error is not None:
         return jsonify({'error': error})
     else:
-        differ = get_differ(lang, revid, title)
+        differ = get_differ(lang, revid, title, timeout=8)
         actions = differ.get_diff()
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': actions
@@ -42,14 +42,29 @@ def tree_diff():
     if error is not None:
         return jsonify({'error': error})
     else:
-        differ = get_differ(lang, revid, title)
+        differ = get_differ(lang, revid, title, timeout=8)
         differ.get_diff()
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'diff': differ.tree_diff
                   }
         return jsonify(result)
 
-def get_differ(lang, revid, title, session=None):
+@app.route('/api/v1/diff-debug', methods=['GET'])
+def diff_debug():
+    """Stop at the tree-diff intermediate stage."""
+    lang, revid, title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'error': error})
+    else:
+        differ = get_differ(lang, revid, title, timeout=45)
+        actions = differ.get_diff()
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
+                  'tree-diff': differ.tree_diff,
+                  'actions': actions
+                  }
+        return jsonify(result)
+
+def get_differ(lang, revid, title, timeout=8, session=None):
     """Gather set of up to `limit` outlinks for an article."""
     if session is None:
         session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
@@ -79,7 +94,7 @@ def get_differ(lang, revid, title, session=None):
         prev_wikitext = ""  # current revision probaby is first page revision
 
     try:
-        differ = EditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=8)
+        differ = EditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=timeout)
     except Exception:
         traceback.print_exc()
     return differ
