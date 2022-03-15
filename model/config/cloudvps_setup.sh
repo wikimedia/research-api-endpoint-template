@@ -34,6 +34,7 @@ rm -rf ${TMP_PATH}
 mkdir -p ${TMP_PATH}
 mkdir -p ${ETC_PATH}
 mkdir -p ${ETC_PATH}/lt
+mkdir -p ${JAVA_PATH}
 
 echo "Cloning repositories..."
 git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
