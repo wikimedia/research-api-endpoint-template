@@ -1,9 +1,9 @@
 [Unit]
-Description=Research API service
+Description=Language Tool API service
 After=syslog.target
 
 [Service]
-ExecStart=/usr/bin/uwsgi --ini /etc/api-endpoint/uwsgi.ini
+ExecStart=java -cp /etc/api-endpoint/lt/LanguageTool-5.6/languagetool-server.jar org.languagetool.server.HTTPServer --port 8081 --allow-origin
 User=www-data
 Group=www-data
 Restart=always
