@@ -45,7 +45,7 @@ unzip LanguageTool-stable.zip -d ${ETC_PATH}/lt
 
 echo "Downloading Java8, hang on..."
 wget -O "${JAVA8_TARNAME}" "${JAVA8_WGET_URL}"
-shasum ${JAVA8_TARNAME}" | awk '$1=="${JAVA_EXPECTED_SHASUM}"{exit 1}'
+shasum "${JAVA8_TARNAME}" | awk '$1=="${JAVA_EXPECTED_SHASUM}"{exit 1}'
 tar zxvf "${JAVA8_TARNAME}" -C "${JAVA_PATH}"
 sudo update-alternatives --install "/usr/bin/java" "java" "${JAVA_PATH}/${JAVA8_DIRNAME}/bin/java" 1
 
