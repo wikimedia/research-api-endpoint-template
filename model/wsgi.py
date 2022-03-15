@@ -1,4 +1,5 @@
 import os
+import time
 import traceback
 
 from flask import Flask, request, jsonify
@@ -52,6 +53,7 @@ def tree_diff():
 @app.route('/api/v1/diff-debug', methods=['GET'])
 def diff_debug():
     """Stop at the tree-diff intermediate stage."""
+    start = time.time()
     lang, revid, title, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
@@ -60,7 +62,8 @@ def diff_debug():
         actions = differ.get_diff()
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'tree-diff': differ.tree_diff,
-                  'actions': actions
+                  'actions': actions,
+                  'elapsed-time (s)': time.time() - start
                   }
         return jsonify(result)
 
