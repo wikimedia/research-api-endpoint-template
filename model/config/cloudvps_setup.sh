@@ -14,7 +14,7 @@ LANGTOOLS_ZIP='https://languagetool.org/download/LanguageTool-stable.zip'
 
 # java installation
 JAVA8_WGET_URL="https://javadl.oracle.com/webapps/download/AutoDL?BundleId=245797_df5ad55fdd604472a86a45a217032c7d"
-JAVA8_TARNAME="jre-8u321-linux-x64_2.tar.gz"
+JAVA8_TARNAME="jre-8u321-linux-x64.tar.gz"
 JAVA8_DIRNAME="jre1.8.0_321"
 JAVA_EXPECTED_SHASUM='b6d6e505cc1d48c670d69edfd5beae5717472512'
 
@@ -45,7 +45,7 @@ unzip LanguageTool-stable.zip -d ${ETC_PATH}/lt
 
 echo "Downloading Java8, hang on..."
 wget -O "${JAVA8_TARNAME}" "${JAVA8_WGET_URL}"
-echo "${JAVA_EXPECTED_SHASUM} ${JAVA8_TARNAME}" | shasum -c - || exit 1
+shasum ${JAVA8_TARNAME}" | awk '$1=="${JAVA_EXPECTED_SHASUM}"{exit 1}'
 tar zxvf "${JAVA8_TARNAME}" -C "${JAVA_PATH}"
 sudo update-alternatives --install "/usr/bin/java" "java" "${JAVA_PATH}/${JAVA8_DIRNAME}/bin/java" 1
 
