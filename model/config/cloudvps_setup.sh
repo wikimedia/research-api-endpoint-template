@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # setup Cloud VPS instance with initial server, libraries, code, model, etc.
 
-# these can be changed but most other variables should be left alone
+# folder labels
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='languagetool'  # directory where repo code will go
 
-# code
+# where this code lives / config for running the server
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='language-tool'
 
-# langtools application
+# langtools application -- this is downloaded and has a Java jar that runs the server (see model.service)
 LANGTOOLS_ZIP='https://languagetool.org/download/LanguageTool-stable.zip'
 
-# java installation
+# java8 installation -- unfortunately not supported via standard apt-get just yet
 JAVA8_WGET_URL="https://javadl.oracle.com/webapps/download/AutoDL?BundleId=245797_df5ad55fdd604472a86a45a217032c7d"
 JAVA8_TARNAME="jre-8u321-linux-x64.tar.gz"
 JAVA8_DIRNAME="jre1.8.0_321"
@@ -25,7 +25,7 @@ TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting u
 
 echo "Updating the system..."
 apt-get update
-apt-get install -y build-essential  # gcc (c++ compiler) necessary for fasttext
+apt-get install -y build-essential  # might not be necessary anymore but I'm not sure
 apt-get install -y nginx  # handles incoming requests, load balances, and passes to uWSGI to be fulfilled
 # potentially add: apt-get install -y git python3 libpython3.7 python3-setuptools
 
@@ -42,12 +42,17 @@ git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 echo "Downloading language tools, hang on..."
 cd ${TMP_PATH}
 wget -O LanguageTool-stable.zip ${LANGTOOLS_ZIP}
+# if you've already downloaded LanguageTool, you might need to accept all (A) for overwriting
+# NOTE: this currently unzips to LanguageTool-5.6; if that changes, model.service will need to be updated
 unzip LanguageTool-stable.zip -d ${ETC_PATH}/lt
 
 echo "Downloading Java8, hang on..."
 wget -O "${JAVA8_TARNAME}" "${JAVA8_WGET_URL}"
+# check to make sure Java8 file is the expected one
+# Could do the same with the above but I expect LanguageTool to be updated more frequently
 shasum "${JAVA8_TARNAME}" | awk '$1=="${JAVA_EXPECTED_SHASUM}"{exit 1}'
 tar zxvf "${JAVA8_TARNAME}" -C "${JAVA_PATH}"
+# set up Java8 for the system
 sudo update-alternatives --install "/usr/bin/java" "java" "${JAVA_PATH}/${JAVA8_DIRNAME}/bin/java" 1
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
