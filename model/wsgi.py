@@ -55,7 +55,7 @@ MEDIA_EXTENSIONS = list(set(IMAGE_EXTENSIONS + VIDEO_EXTENSIONS + AUDIO_EXTENSIO
 # build regex that checks for all media extensions
 EXTEN_REGEX = ('(' + '|'.join([e + r'\b' for e in MEDIA_EXTENSIONS]) + ')').replace('.', r'\.')
 # join in the extension regex with one that requiries at least one alphanumeric and/or a few special characters before it
-EXTEN_PATTERN = re.compile(fr'([\w ,().-]+){EXTEN_REGEX}', flags=re.UNICODE)
+EXTEN_PATTERN = re.compile(fr"([\w ',().-]+){EXTEN_REGEX}", flags=re.UNICODE)
 
 MEDIA_ALIASES = {
     "ab": ["Медиа", "Файл", "Афаил", "Амедиа", "Изображение"],
@@ -680,7 +680,7 @@ def wikitext_to_features(wikitext, lang='en', level=3):
 
         page_length = len(wikitext)
         refs = len(ref_singleton.findall(wikitext)) + len(ref_tag.findall(wikitext))
-        links = [m for m in re.findall(r'(?<=\[\[)(.*?)(?=]])', wikitext, flags=re.DOTALL)]
+        links = [m.split('|', maxsplit=1)[0] for m in re.findall(r'(?<=\[\[)(.*?)(?=]])', wikitext, flags=re.DOTALL)]
         categories = len([1 for l in links if l.split(':', maxsplit=1)[0] in cat_prefixes])
         media_bra = [l.split(':', maxsplit=1)[1] for l in links if l.split(':', maxsplit=1)[0] in med_prefixes]
         media_ext = [''.join(m).strip() for m in EXTEN_PATTERN.findall(wikitext) if len(m[0]) <= 240]
