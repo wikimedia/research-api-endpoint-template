@@ -602,7 +602,7 @@ def misalignment_article():
     if error:
         return jsonify({'error':error})
     last_month = datetime.now().replace(day=1) - timedelta(1)
-    quality, features = get_quality(lang, title)
+    quality, features = get_quality(lang, title=title)
     demand = get_demand(lang, title, last_month.year, last_month.month)
     misalignment = quality - demand
 
@@ -613,15 +613,23 @@ def quality_article():
     lang, title, error = validate_api_args()
     if error:
         return jsonify({'error':error})
-    quality, _ = get_quality(lang, title)
+    quality, _ = get_quality(lang, title=title)
     return jsonify({'lang':lang, 'title':title, 'quality':quality})
+
+@app.route('/api/v1/quality-revid', methods=['GET'])
+def quality_revid():
+    lang, revid, error = validate_revid_api_args()
+    if error:
+        return jsonify({'error':error})
+    quality, features = get_quality(lang, revid=revid)
+    return jsonify({'lang':lang, 'revid':revid, 'quality':quality, 'features':features})
 
 @app.route('/api/v1/quality-article-features', methods=['GET'])
 def quality_article_features():
     lang, title, error = validate_api_args()
     if error:
         return jsonify({'error':error})
-    quality, features = get_quality(lang, title)
+    quality, features = get_quality(lang, title=title)
     return jsonify({'lang':lang, 'title':title, 'quality':quality, 'features':features})
 
 @app.route('/api/v1/demand-article', methods=['GET'])
@@ -692,19 +700,30 @@ def wikitext_to_features(wikitext, lang='en', level=3):
     except Exception:
         return (0,0,0,0,0,0)
 
-def get_quality(lang, title):
+def get_quality(lang, title=None, revid=None):
     """Gather set of up to `limit` outlinks for an article."""
     session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
 
-    # generate list of all outlinks (to namespace 0) from the article and their associated Wikidata IDs
-    result = session.get(
-        action="parse",
-        page=title,
-        redirects='',
-        prop='wikitext',
-        format='json',
-        formatversion=2
-    )
+    # get wikitext for article
+    if title is not None:
+        result = session.get(
+            action="parse",
+            page=title,
+            redirects='',
+            prop='wikitext',
+            format='json',
+            formatversion=2
+        )
+    elif revid is not None:
+        result = session.get(
+            action="parse",
+            oldid=revid,
+            prop='wikitext',
+            format='json',
+            formatversion=2
+        )
+    else:
+        raise Exception("Must pass either title or revision ID to quality function.")
     try:
         wikitext = result['parse']['wikitext']
         page_length, refs, wikilinks, categories, media, headings = wikitext_to_features(wikitext, lang)
@@ -746,6 +765,13 @@ def get_canonical_page_title(title, lang):
 def validate_lang(lang):
     return lang in WIKIPEDIA_LANGUAGE_CODES
 
+def validate_revid(revid):
+    try:
+        revid = int(revid)
+        return revid > 0
+    except Exception:
+        return False
+
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
@@ -764,6 +790,25 @@ def validate_api_args():
         error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
 
     return lang, page_title, error
+
+def validate_revid_api_args():
+    """Validate API arguments for language-agnostic model."""
+    error = None
+    lang = None
+    revid = None
+    if request.args.get('revid') and request.args.get('lang'):
+        lang = request.args['lang']
+        revid = request.args.get('revid')
+        if not validate_revid(revid):
+            error = f'invalid revision ID: {revid}'
+    elif request.args.get('lang'):
+        error = 'missing a revision ID -- e.g., "204134947" for <a href="https://en.wikipedia.org/w/index.php?oldid=204134947">https://en.wikipedia.org/w/index.php?oldid=204134947</a>'
+    elif request.args.get('revid'):
+        error = 'missing a language -- e.g., "en" for English'
+    else:
+        error = 'missing language -- e.g., "en" for English -- and revid -- e.g., "204134947" for <a href="https://en.wikipedia.org/w/index.php?oldid=204134947">https://en.wikipedia.org/w/index.php?oldid=204134947</a>'
+
+    return lang, revid, error
 
 def load_misalignment_topic_data():
     misalignment_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/misalignment/misalignment-by-wiki-topic.tsv.gz'
