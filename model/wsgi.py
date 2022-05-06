@@ -5,6 +5,7 @@ import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from mwedittypes import EditTypes
+from mwsimpleedittypes import EditTypes as SimpleEditTypes
 import mwapi
 import yaml
 
@@ -21,7 +22,7 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-@app.route('/api/v1/full-diff', methods=['GET'])
+@app.route('/api/v1/diff', methods=['GET'])
 @app.route('/api/v1/actions', methods=['GET'])
 def full_diff():
     """Full version -- allow for testing API without breaking interface"""
@@ -29,46 +30,36 @@ def full_diff():
     if error is not None:
         return jsonify({'error': error})
     else:
-        differ = get_differ(lang, revid, title, timeout=8)
-        actions = differ.get_diff()
+        actions = get_actions(lang, revid, title, timeout=8)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': actions
                   }
         return jsonify(result)
 
-@app.route('/api/v1/diff', methods=['GET'])
-def tree_diff():
-    """Stop at the tree-diff intermediate stage."""
-    lang, revid, title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
-    else:
-        differ = get_differ(lang, revid, title, timeout=8)
-        differ.get_diff()
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'diff': differ.tree_diff
-                  }
-        return jsonify(result)
-
 @app.route('/api/v1/diff-debug', methods=['GET'])
+@app.route('/api/v1/actions-debug', methods=['GET'])
 def diff_debug():
-    """Stop at the tree-diff intermediate stage."""
-    start = time.time()
+    """Full diff, tree diff, and simple diff to compare."""
     lang, revid, title, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
     else:
-        differ = get_differ(lang, revid, title, timeout=45)
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'}
+        prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
+        start = time.time()
+        differ = EditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=45)
         actions = differ.get_diff()
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'tree-diff': differ.tree_diff,
-                  'actions': actions,
-                  'elapsed-time (s)': time.time() - start
-                  }
+        result['full'] = {'actions': actions,
+                          'tree': differ.tree_diff,
+                          'elapsed-time (s)': time.time() - start}
+        start = time.time()
+        differ = SimpleEditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=45)
+        actions = differ.get_diff()
+        result['simple'] = {'actions': actions,
+                            'elapsed-time (s)': time.time() - start}
         return jsonify(result)
 
-def get_differ(lang, revid, title, timeout=8, session=None):
-    """Gather set of up to `limit` outlinks for an article."""
+def get_wikitext(lang, revid, title, session=None):
     if session is None:
         session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
 
@@ -86,7 +77,6 @@ def get_differ(lang, revid, title, timeout=8, session=None):
         format='json',
         formatversion=2,
     )
-    differ = None
     try:
         curr_wikitext = result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
     except IndexError:
@@ -96,11 +86,18 @@ def get_differ(lang, revid, title, timeout=8, session=None):
     except IndexError:
         prev_wikitext = ""  # current revision probaby is first page revision
 
+    return prev_wikitext, curr_wikitext
+
+def get_actions(lang, revid, title, timeout=8, session=None):
+    """Get differ for ."""
+    prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title, session)
+
     try:
         differ = EditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=timeout)
+        actions = differ.get_diff()
     except Exception:
         traceback.print_exc()
-    return differ
+    return actions
 
 def get_page_title(lang, revid, session=None):
     """Get page associated with a given revision ID"""
