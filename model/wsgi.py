@@ -48,9 +48,10 @@ MIN_MAX_LIN = 0.1
 MEDIA_PREFIXES = ['File', 'Image', 'Media']
 CAT_PREFIXES = ['Category']
 
-IMAGE_EXTENSIONS = ['.jpg', '.png', '.svg', '.gif']
+# https://commons.wikimedia.org/wiki/Commons:File_types
+IMAGE_EXTENSIONS = ['.jpg', '.png', '.svg', '.gif', '.jpeg', '.tif', '.bmp', '.webp', '.xcf']
 VIDEO_EXTENSIONS = ['.ogv', '.webm', '.mpg', '.mpeg']
-AUDIO_EXTENSIONS = ['.ogg', '.mp3', '.mid', '.webm', '.flac', '.wav']
+AUDIO_EXTENSIONS = ['.ogg', '.mp3', '.mid', '.webm', '.flac', '.wav', '.oga']
 MEDIA_EXTENSIONS = list(set(IMAGE_EXTENSIONS + VIDEO_EXTENSIONS + AUDIO_EXTENSIONS))
 # build regex that checks for all media extensions
 EXTEN_REGEX = ('(' + '|'.join([e + r'\b' for e in MEDIA_EXTENSIONS]) + ')').replace('.', r'\.')
