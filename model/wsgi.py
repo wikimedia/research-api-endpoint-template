@@ -269,14 +269,14 @@ MEDIA_ALIASES = {
 }
 
 # https://commons.wikimedia.org/wiki/Commons:File_types
-IMAGE_EXTENSIONS = ['.jpg', '.png', '.svg', '.gif']
+IMAGE_EXTENSIONS = ['.jpg', '.png', '.svg', '.gif', '.jpeg', '.tif', '.bmp', '.webp', '.xcf']
 VIDEO_EXTENSIONS = ['.ogv', '.webm', '.mpg', '.mpeg']
-AUDIO_EXTENSIONS = ['.ogg', '.mp3', '.mid', '.webm', '.flac', '.wav']
+AUDIO_EXTENSIONS = ['.ogg', '.mp3', '.mid', '.webm', '.flac', '.wav', '.oga']
 MEDIA_EXTENSIONS = list(set(IMAGE_EXTENSIONS + VIDEO_EXTENSIONS + AUDIO_EXTENSIONS))
 
-exten_regex = ('(' + '|'.join([e + '\\b' for e in MEDIA_EXTENSIONS]) + ')').replace('.', '\.')
-EXTENSION_PATTERN = re.compile(f'([\w ,\(\)\.&-]+){exten_regex}', flags=re.UNICODE)
-BRACKET_PATTERN = re.compile('(?<=\[\[)(.*?)(?=\]\])', flags=re.DOTALL)
+exten_regex = ('(' + '|'.join([e + r'\b' for e in MEDIA_EXTENSIONS]) + ')').replace('.', r'\.')
+EXTENSION_PATTERN = re.compile(fr"([\w '\",().-]+){exten_regex}", flags=re.UNICODE)
+BRACKET_PATTERN = re.compile(r'(?<=\[\[)(.*?)(?=]])', flags=re.DOTALL)
 
 # load in app user-agent or any other app config
 app.config.update(
