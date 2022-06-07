@@ -69,6 +69,8 @@ wget -O data.tsv ${DATA_WGET}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
+chown -R www-data:www-data ${TMP_PATH}
+chown -R www-data:www-data ${DRUID_PATH}
 
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${REPO_LBL}/model/config/model.nginx ${ETC_PATH}
