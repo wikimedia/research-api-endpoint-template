@@ -31,7 +31,7 @@ TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting u
 echo "Updating the system, hang on..."
 apt-get update
 apt-get install -y build-essential  # might not be necessary anymore but I'm not sure
-apt-get install python-is-python3
+apt-get install python2  # unfortunately needed for some druid scripts
 apt-get install -y nginx  # handles incoming requests, load balances, and passes to uWSGI to be fulfilled
 curl -fsSL https://deb.nodesource.com/setup_14.x -o nodesource_setup.sh  # bring in nodejs v14 source
 bash nodesource_setup.sh  # add nodejs v14 source to apt-get
@@ -83,14 +83,15 @@ ln -s /etc/nginx/sites-available/model /etc/nginx/sites-enabled/
 cp ${ETC_PATH}/model.service /etc/systemd/system/
 cp ${ETC_PATH}/druid.service /etc/systemd/system/
 
-echo "Enabling and starting services..."
-systemctl enable model.service  # uwsgi starts when server starts up
-systemctl enable druid.service  # uwsgi starts when server starts up
-systemctl daemon-reload  # refresh state
-
-systemctl restart model.service  # start up uwsgi
-systemctl restart druid.service  # start up uwsgi
-systemctl restart nginx  # start up nginx
-
-echo "Loading data into Druid, hang on..."
+echo "Enabling and starting druid..."
+systemctl enable druid.service  # druid available on reboot
+systemctl restart druid.service  # start up druid
 "${DRUID_PATH}/${DRUID_DIRNAME}/bin/post-index-task" --file "${ETC_PATH}/referral-data.json" --url http://localhost:8081
+
+echo "Enabling and starting turnilo..."
+systemctl enable model.service  # turnilo available on reboot
+systemctl restart model.service  # start up turnilo
+
+echo "Preparing to go..."
+systemctl restart nginx  # start up nginx
+systemctl daemon-reload  # refresh state

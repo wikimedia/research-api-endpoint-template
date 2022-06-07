@@ -38,10 +38,10 @@ cp ${ETC_PATH}/model.service /etc/systemd/system/
 cp ${ETC_PATH}/druid.service /etc/systemd/system/
 
 echo "Enabling and starting services..."
-systemctl enable model.service  # uwsgi starts when server starts up
 systemctl enable druid.service  # uwsgi starts when server starts up
+systemctl enable model.service  # uwsgi starts when server starts up
 systemctl daemon-reload  # refresh state
 
-systemctl restart model.service  # start up uwsgi
 systemctl restart druid.service  # start up uwsgi
+systemctl restart model.service  # start up uwsgi
 systemctl restart nginx  # start up nginx
