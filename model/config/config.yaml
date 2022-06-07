@@ -23,9 +23,9 @@ dataCubes:
     defaultPinnedDimensions: [ "search_engine" ]
 
     dimensions:
-      - name: time
+      - name: __time
         title: Time
-        formula: $time
+        formula: $__time
         kind: time
         granularities: [ 'P1D', 'P1W', 'P1M', 'P3M', 'P1Y' ]
 
