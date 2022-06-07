@@ -31,6 +31,7 @@ TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting u
 echo "Updating the system, hang on..."
 apt-get update
 apt-get install -y build-essential  # might not be necessary anymore but I'm not sure
+apt-get install python-is-python3
 apt-get install -y nginx  # handles incoming requests, load balances, and passes to uWSGI to be fulfilled
 curl -fsSL https://deb.nodesource.com/setup_14.x -o nodesource_setup.sh  # bring in nodejs v14 source
 bash nodesource_setup.sh  # add nodejs v14 source to apt-get
