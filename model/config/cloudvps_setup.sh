@@ -77,6 +77,7 @@ cp ${TMP_PATH}/${REPO_LBL}/model/config/model.nginx ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/config/model.service ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/config/druid.service ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/config/referral-data.json ${ETC_PATH}
+cp ${TMP_PATH}/${REPO_LBL}/model/config/config.yaml ${ETC_PATH}
 cp ${ETC_PATH}/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model
