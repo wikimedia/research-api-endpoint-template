@@ -3,11 +3,11 @@ log_format private '[$time_local] "$request" $status $body_bytes_sent "$http_ref
 
 server {
     listen 80;  # default port 80; must match backend port selected when creating web proxy on Horizon
-    server_name copyedits.wmcloud.org;
+    server_name wsp-druid.wmcloud.org;
     # remove this line or change 'private' to 'combined' to restore user-agent + IP information
     access_log /var/log/nginx/access.log private;
 
     location / {
-        proxy_pass http://localhost:8081;
+        proxy_pass http://localhost:9090;
     }
 }

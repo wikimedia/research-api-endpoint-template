@@ -1,0 +1,64 @@
+clusters:
+  - name: druid
+    type: druid
+    url: "http://localhost:8888"
+
+dataCubes:
+  - name: referrals
+    title: Search Engine Referrals
+    description: |
+      Data on search engine referrals to Wikipedia. Split by country, language, OS, and browser.
+    clusterName: druid
+    source: search-referral
+    timeAttribute: time
+
+    refreshRule:
+      rule: realtime
+
+    introspection: no-autofill
+    maxSplits: 4
+
+    defaultDuration: P1M
+    defaultSelectedMeasures: [ "num_referrals" ]
+    defaultPinnedDimensions: [ "search_engine" ]
+
+    dimensions:
+      - name: time
+        title: Time
+        formula: $time
+        kind: time
+        granularities: [ 'P1D', 'P1W', 'P1M', 'P3M', 'P1Y' ]
+
+      - name: search_engine
+        title: Search Engine
+        description: Search engine that referred pageview -- e.g., DuckDuckGo
+        formula: $search_engine
+
+      - name: facets_group
+        title: Facets
+        dimensions:
+          - name: country
+            title: Country
+            description: Country of reader
+            formula: $country
+          - name: language
+            title: Language
+            description: Wikipedia language -- e.g., en for English Wikipedia
+            formula: $lang
+          - name: os
+            title: OS Family
+            description: Reader operating system -- e.g., Android
+            formula: $os_family
+          - name: browser
+            title: Browser Family
+            description: Reader web browser -- e.g., Firefox
+            formula: $browser_family
+
+    measures:
+      - name: num_referrals
+        title: Total Referrals
+        formula: $main.sum($num_referrals)
+
+customization:
+  urlShortener: |
+    return request.get('http://tinyurl.com/api-create.php?url=' + encodeURIComponent(url))

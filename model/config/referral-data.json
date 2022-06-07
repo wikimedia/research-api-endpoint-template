@@ -1,0 +1,42 @@
+{
+  "type" : "index",
+  "spec" : {
+    "dataSchema" : {
+      "dataSource" : "search-referral",
+      "timestampSpec" : {
+        "format" : "yyyy-MM-dd",
+        "column" : "time"
+      },
+      "dimensionsSpec" : {
+        "dimensions": [
+          { "name" : "country", "type" : "string" },
+          { "name" : "lang", "type" : "string" },
+          { "name" : "browser_family", "type" : "string" },
+          { "name" : "os_family", "type" : "string" },
+          { "name" : "search_engine", "type" : "string" },
+          { "name" : "num_referrals", "type" : "long" }
+        ]
+      },
+      "metricsSpec" : [],
+      "granularitySpec" : {
+        "type" : "uniform",
+        "segmentGranularity" : "day",
+        "queryGranularity" : "day",
+        "rollup" : false
+      }
+    },
+    "ioConfig" : {
+      "type" : "index",
+      "inputSource" : {
+        "type" : "local",
+        "baseDir" : "/tmp/api-endpoint/",
+        "filter" : "data.tsv"
+      },
+      "inputFormat" : {
+        "type" : "tsv",
+        "findColumnsFromHeader" : true
+      }
+    }
+  }
+}
+
