@@ -7,7 +7,7 @@ REPO_LBL='turnilo'  # directory where repo code will go
 
 # where this code lives / config for running the server
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-GIT_BRANCH='turnilo-druid'
+GIT_BRANCH='turnilo-small-test'
 DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/referrals/data.tsv'  # data for Turnilo
 
 # Druid database -- this is downloaded and runs the backend database for the search data and turnilo

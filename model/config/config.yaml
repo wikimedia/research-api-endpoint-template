@@ -10,7 +10,7 @@ dataCubes:
       Data on search engine referrals to Wikipedia. Split by country, language, OS, and browser.
     clusterName: druid
     source: search-referral
-    timeAttribute: time
+    timeAttribute: __time
 
     refreshRule:
       rule: realtime
