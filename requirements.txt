@@ -3,7 +3,6 @@ Flask
 Flask-Cors
 mwapi
 mwedittypes
-mwsimpleedittypes
 mwparserfromhell
 PyYAML
 uWSGI

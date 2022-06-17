@@ -4,8 +4,7 @@ import traceback
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from mwedittypes import EditTypes
-from mwsimpleedittypes import EditTypes as SimpleEditTypes
+from mwedittypes import EditTypes, SimpleEditTypes
 import mwapi
 import yaml
 
