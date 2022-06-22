@@ -26,7 +26,6 @@ MQV_FN = os.path.join(__dir__, 'resources/quality-maxvals-by-wiki.tsv.gz')
 MAX_DEM_VALS = {}
 MDV_FN = os.path.join(__dir__, 'resources/demand-maxvals-by-wiki.tsv.gz')
 TOPIC_LBLS = {}
-SFN_TEMPLATES = [t.lower() for t in ["Shortened footnote template", "sfn", "Sfnp", "Sfnm", "Sfnmp"]]
 
 COEF_LEN = 0.395
 COEF_MED = 0.114
@@ -609,40 +608,6 @@ def misalignment_article():
 
     return jsonify({'lang':lang, 'title':title, 'quality':quality, 'demand':demand, 'misalignment':misalignment})
 
-@app.route('/api/v1/quality-article', methods=['GET'])
-def quality_article():
-    lang, title, error = validate_api_args()
-    if error:
-        return jsonify({'error':error})
-    quality, _ = get_quality(lang, title=title)
-    return jsonify({'lang':lang, 'title':title, 'quality':quality})
-
-@app.route('/api/v1/quality-revid', methods=['GET'])
-def quality_revid():
-    lang, revid, error = validate_revid_api_args()
-    if error:
-        return jsonify({'error':error})
-    quality, features = get_quality(lang, revid=revid)
-    return jsonify({'lang':lang, 'revid':revid, 'quality':quality, 'features':features})
-
-@app.route('/api/v1/quality-article-features', methods=['GET'])
-def quality_article_features():
-    lang, title, error = validate_api_args()
-    if error:
-        return jsonify({'error':error})
-    quality, features = get_quality(lang, title=title)
-    return jsonify({'lang':lang, 'title':title, 'quality':quality, 'features':features})
-
-@app.route('/api/v1/demand-article', methods=['GET'])
-def demand_article():
-    lang, title, error = validate_api_args()
-    if error:
-        return jsonify({'error': error})
-    last_month = datetime.now().replace(day=1) - timedelta(1)
-    demand = get_demand(lang, title, last_month.year, last_month.month)
-
-    return jsonify({'lang':lang, 'title':title, 'demand': demand})
-
 def get_demand(lang, title, year=2021, month=4):
     """Gather set of up to `limit` outlinks for an article."""
     p = PageviewsClient(user_agent=app.config['CUSTOM_UA'])
@@ -792,24 +757,6 @@ def validate_api_args():
 
     return lang, page_title, error
 
-def validate_revid_api_args():
-    """Validate API arguments for language-agnostic model."""
-    error = None
-    lang = None
-    revid = None
-    if request.args.get('revid') and request.args.get('lang'):
-        lang = request.args['lang']
-        revid = request.args.get('revid')
-        if not validate_revid(revid):
-            error = f'invalid revision ID: {revid}'
-    elif request.args.get('lang'):
-        error = 'missing a revision ID -- e.g., "204134947" for <a href="https://en.wikipedia.org/w/index.php?oldid=204134947">https://en.wikipedia.org/w/index.php?oldid=204134947</a>'
-    elif request.args.get('revid'):
-        error = 'missing a language -- e.g., "en" for English'
-    else:
-        error = 'missing language -- e.g., "en" for English -- and revid -- e.g., "204134947" for <a href="https://en.wikipedia.org/w/index.php?oldid=204134947">https://en.wikipedia.org/w/index.php?oldid=204134947</a>'
-
-    return lang, revid, error
 
 def load_misalignment_topic_data():
     misalignment_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/misalignment/misalignment-by-wiki-topic.tsv.gz'
