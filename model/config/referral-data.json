@@ -5,7 +5,7 @@
       "dataSource" : "search-referral",
       "timestampSpec" : {
         "format" : "yyyy-MM-dd",
-        "column" : "time"
+        "column" : "__time"
       },
       "dimensionsSpec" : {
         "dimensions": [
