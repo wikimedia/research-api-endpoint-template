@@ -601,14 +601,13 @@ def wikitext_to_features(wikitext, lang='en', level=3):
 
     Pros:
     * Much faster than mwparserfromhell (10x speed-up in testing) -- e.g., 200 µs vs. 2 ms for medium-sized article
-    * Can be easily extended to catch edge-cases -- e.g., images added via infoboxes/galleries that lack bracket syntax
+    * Extended to catch some edge-cases -- e.g., images added via infoboxes/galleries that lack bracket syntax
 
     Cons/Issues:
     * Misses intra-nested links:
         * e.g. [[File:Image.jpg|Image with a [[caption]]]] only catches the File and not the [[caption]]
         * Could be extended by also regexing each link found, which should catch almost all
     * Misses references added via templates w/o ref tags -- e.g., shortened-footnote templates.
-    * Misses media added via templates / gallery tags that lack brackets
     """
     try:
         cat_prefixes = [c.lower() for c in CAT_PREFIXES + CAT_ALIASES.get(lang, [])]
