@@ -5,7 +5,6 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-MODEL_WGET='https://ndownloader.figshare.com/files/<file-number>'  # model binary -- ndownloader.figshare is a good host
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -42,24 +41,11 @@ echo "Cloning repositories..."
 
 # The simpler process is to just install dependencies per a requirements.txt file
 # With updates, however, the packages could change, leading to unexpected behavior or errors
-git clone --branch misalignment ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch quality-article ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
-
-# If UI included, consider the following for managing JS dependencies:
-# echo "Installing front-end resources..."
-# mkdir -p ${SRV_PATH}/resources
-# cd ${TMP_PATH}
-# npm install bower
-# cd ${SRV_PATH}/resources
-# ${TMP_PATH}/node_modules/bower/bin/bower install --allow-root ${TMP_PATH}/recommendation-api/recommendation/web/static/bower.json
-
-echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
@@ -69,7 +55,6 @@ chown -R www-data:www-data ${LIB_PATH}
 
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${REPO_LBL}/model/config/* ${ETC_PATH}
-# TODO: fix this to be more elegant (one directory or not necessary because run as package)
 cp ${TMP_PATH}/${REPO_LBL}/model/wsgi.py ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/flask_config.yaml ${ETC_PATH}
 cp ${ETC_PATH}/model.nginx /etc/nginx/sites-available/model

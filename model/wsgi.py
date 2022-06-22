@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta
 import gzip
 import math
 import os
@@ -9,7 +8,6 @@ from urllib.request import urlretrieve
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mwapi
-from mwviews.api import PageviewsClient
 import yaml
 
 
@@ -17,15 +15,8 @@ app = Flask(__name__)
 __dir__ = os.path.dirname(__file__)
 
 WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
-MISALIGNMENT_TOPICS = {}
-MT_FN = os.path.join(__dir__, 'resources/misalignment-by-wiki-topic.tsv.gz')
-MISALIGNMENT_REGION = {}
-MR_FN = os.path.join(__dir__, 'resources/misalignment-by-wiki-region.tsv.gz')
 MAX_QUAL_VALS = {}
 MQV_FN = os.path.join(__dir__, 'resources/quality-maxvals-by-wiki.tsv.gz')
-MAX_DEM_VALS = {}
-MDV_FN = os.path.join(__dir__, 'resources/demand-maxvals-by-wiki.tsv.gz')
-TOPIC_LBLS = {}
 SFN_TEMPLATES = [t.lower() for t in ["Shortened footnote template", "sfn", "Sfnp", "Sfnm", "Sfnmp"]]
 
 COEF_LEN = 0.395
@@ -34,8 +25,6 @@ COEF_HEA = 0.123
 COEF_REF = 0.181
 COEF_LIN = 0.115
 COEF_CAT = 0.070
-
-MIN_MAX_PVS = 100
 
 # See: https://github.com/geohci/miscellaneous-wikimedia/blob/master/article-features/quality_model_features_V2.ipynb
 MIN_MAX_MED = 2
@@ -577,93 +566,34 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-@app.route('/api/v1/misalignment-topic', methods=['GET'])
-def misalignment_topic():
-    langs = [lang for lang in request.args.get('lang', '').lower().split('|') if validate_lang(lang)][:6]
-    results = []
-    for t in sorted(MISALIGNMENT_TOPICS):
-        results.append({'topic': t, 'topic-display': TOPIC_LBLS[t],
-                        'data': {l: {'num_articles': MISALIGNMENT_TOPICS[t][l][0], 'misalignment': f'{MISALIGNMENT_TOPICS[t][l][1]:.3f}'} for l in langs}})
-
-    return jsonify({'langs':langs, 'results':results})
-
-@app.route('/api/v1/misalignment-region', methods=['GET'])
-def misalignment_region():
-    langs = [lang for lang in request.args.get('lang', '').lower().split('|') if validate_lang(lang)][:6]
-    results = []
-    for r in sorted(MISALIGNMENT_REGION):
-        results.append({'topic': r, 'topic-display': r,
-                        'data': {l: {'num_articles': MISALIGNMENT_REGION[r][l][0], 'misalignment': f'{MISALIGNMENT_REGION[r][l][1]:.3f}'} for l in langs}})
-
-    return jsonify({'langs':langs, 'results':results})
-
-@app.route('/api/v1/misalignment-article', methods=['GET'])
-def misalignment_article():
-    lang, title, error = validate_api_args()
-    if error:
-        return jsonify({'error':error})
-    last_month = datetime.now().replace(day=1) - timedelta(1)
-    quality, features = get_quality(lang, title=title)
-    demand = get_demand(lang, title, last_month.year, last_month.month)
-    misalignment = quality - demand
-
-    return jsonify({'lang':lang, 'title':title, 'quality':quality, 'demand':demand, 'misalignment':misalignment})
 
 @app.route('/api/v1/quality-article', methods=['GET'])
 def quality_article():
     lang, title, error = validate_api_args()
     if error:
-        return jsonify({'error':error})
+        return jsonify({'error': error})
     quality, _ = get_quality(lang, title=title)
-    return jsonify({'lang':lang, 'title':title, 'quality':quality})
+    return jsonify({'lang': lang, 'title': title, 'quality': quality,
+                    'class': qual_score_to_class(quality)})
 
 @app.route('/api/v1/quality-revid', methods=['GET'])
+@app.route('/api/v1/quality-revid-features', methods=['GET'])
 def quality_revid():
     lang, revid, error = validate_revid_api_args()
     if error:
-        return jsonify({'error':error})
+        return jsonify({'error': error})
     quality, features = get_quality(lang, revid=revid)
-    return jsonify({'lang':lang, 'revid':revid, 'quality':quality, 'features':features})
+    return jsonify({'lang': lang, 'revid': revid, 'quality': quality,
+                    'class': qual_score_to_class(quality), 'features': features})
 
 @app.route('/api/v1/quality-article-features', methods=['GET'])
 def quality_article_features():
     lang, title, error = validate_api_args()
     if error:
-        return jsonify({'error':error})
-    quality, features = get_quality(lang, title=title)
-    return jsonify({'lang':lang, 'title':title, 'quality':quality, 'features':features})
-
-@app.route('/api/v1/demand-article', methods=['GET'])
-def demand_article():
-    lang, title, error = validate_api_args()
-    if error:
         return jsonify({'error': error})
-    last_month = datetime.now().replace(day=1) - timedelta(1)
-    demand = get_demand(lang, title, last_month.year, last_month.month)
-
-    return jsonify({'lang':lang, 'title':title, 'demand': demand})
-
-def get_demand(lang, title, year=2021, month=4):
-    """Gather set of up to `limit` outlinks for an article."""
-    p = PageviewsClient(user_agent=app.config['CUSTOM_UA'])
-    start = f'{year}{str(month).rjust(2,"0")}01'
-    if start == 12:
-        end = f'{year+1}0101'
-    else:
-        end = f'{year}{str(month+1).rjust(2, "0")}01'
-    try:
-        monthlyviews = p.article_views(f'{lang}.wikipedia',
-                                       articles=title,
-                                       granularity='monthly',
-                                       agent='user',
-                                       start=start,
-                                       end=end)
-        for dt in monthlyviews:
-            if dt.month == month and dt.year == year:
-                return min(math.log10(1 + monthlyviews[dt][title]) / MAX_DEM_VALS[lang], 1)
-    except Exception:
-        traceback.print_exc()
-        return 0
+    quality, features = get_quality(lang, title=title)
+    return jsonify({'lang': lang, 'title': title, 'quality': quality,
+                    'class': qual_score_to_class(quality), 'features': features})
 
 
 def wikitext_to_features(wikitext, lang='en', level=3):
@@ -701,6 +631,22 @@ def wikitext_to_features(wikitext, lang='en', level=3):
     except Exception:
         return (0,0,0,0,0,0)
 
+def qual_score_to_class(score):
+    if score > 0 and score <= 0.42:
+        return 'Stub'
+    elif score <= 0.56:
+        return 'Start'
+    elif score <= 0.73:
+        return 'C'
+    elif score <= 0.85:
+        return 'B'
+    elif score <= 0.93:
+        return 'GA'
+    elif score <= 1:
+        return 'FA'
+    else:
+        return None
+
 def get_quality(lang, title=None, revid=None):
     """Gather set of up to `limit` outlinks for an article."""
     session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
@@ -728,7 +674,6 @@ def get_quality(lang, title=None, revid=None):
     try:
         wikitext = result['parse']['wikitext']
         page_length, refs, wikilinks, categories, media, headings = wikitext_to_features(wikitext, lang)
-        print(lang, MAX_QUAL_VALS[lang])
 
         normed_page_length = math.sqrt(page_length)
         length_x = min(1, normed_page_length / MAX_QUAL_VALS[lang]['l'])
@@ -737,10 +682,12 @@ def get_quality(lang, title=None, revid=None):
         refs_x = min(1, (refs / normed_page_length) / MAX_QUAL_VALS[lang]['r'])
         headings_x = min(1, (headings / normed_page_length) / MAX_QUAL_VALS[lang]['h'])
         wikilinks_x = min(1, math.sqrt(wikilinks) / MAX_QUAL_VALS[lang]['w'])
-        print(length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x)
-        quality = (COEF_LEN * length_x) + (COEF_MED * media_x) + (COEF_HEA * headings_x) + (COEF_REF * refs_x) + (COEF_LIN * wikilinks_x) + (COEF_CAT * categories_x)
-        return quality, {'raw':{'length (bytes)':page_length, 'references':refs, 'wikilinks':wikilinks, 'categories':categories, 'media':media, 'headings':headings},
-                         'normalized':{'length (bytes)':length_x, 'references':refs_x, 'wikilinks':wikilinks_x, 'categories':categories_x, 'media':media_x, 'headings':headings_x}}
+        quality = ((COEF_LEN * length_x) + (COEF_MED * media_x) + (COEF_HEA * headings_x) +
+                   (COEF_REF * refs_x) + (COEF_LIN * wikilinks_x) + (COEF_CAT * categories_x))
+        return quality, {'raw':{'length (bytes)':page_length, 'references':refs, 'wikilinks':wikilinks,
+                                'categories':categories, 'media':media, 'headings':headings},
+                         'normalized':{'length (bytes)':length_x, 'references':refs_x, 'wikilinks':wikilinks_x,
+                                       'categories':categories_x, 'media':media_x, 'headings':headings_x}}
     except Exception:
         traceback.print_exc()
         return 0
@@ -811,68 +758,6 @@ def validate_revid_api_args():
 
     return lang, revid, error
 
-def load_misalignment_topic_data():
-    misalignment_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/misalignment/misalignment-by-wiki-topic.tsv.gz'
-    if not os.path.exists(MT_FN):
-        urlretrieve(misalignment_url, MT_FN)
-    expected_header = ['topic', 'wiki_db', 'num_articles', 'avg_misalignment', 'topic-display']
-    topic_idx = expected_header.index('topic')
-    wiki_idx = expected_header.index('wiki_db')
-    count_idx = expected_header.index('num_articles')
-    mis_idx = expected_header.index('avg_misalignment')
-    top_lbl_idx = expected_header.index('topic-display')
-    wikis = set()
-    with gzip.open(MT_FN, 'rt') as fin:
-        header = next(fin).strip().split('\t')
-        assert header == expected_header
-        for line in fin:
-            line = line.strip().split('\t')
-            wiki = line[wiki_idx]
-            wikis.add(wiki)
-            topic = line[topic_idx]
-            topic_lbl = line[top_lbl_idx]
-            TOPIC_LBLS[topic] = topic_lbl
-            if topic not in MISALIGNMENT_TOPICS:
-                MISALIGNMENT_TOPICS[topic] = {}
-            count = int(line[count_idx])
-            mis = float(line[mis_idx])
-            MISALIGNMENT_TOPICS[topic][wiki] = (count, mis)
-
-    for topic in MISALIGNMENT_TOPICS:
-        for w in wikis:
-            if w not in MISALIGNMENT_TOPICS[topic]:  # possibly define a minimum sample size here too -- e.g., 30
-                MISALIGNMENT_TOPICS[topic][w] = (0, '--')
-
-def load_misalignment_geo_data():
-    misalignment_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/misalignment/misalignment-by-wiki-region.tsv.gz'
-    if not os.path.exists(MR_FN):
-        urlretrieve(misalignment_url, MR_FN)
-    expected_header = ['wiki_db', 'region', 'num_articles', 'avg_misalignment']
-    region_idx = expected_header.index('region')
-    wiki_idx = expected_header.index('wiki_db')
-    count_idx = expected_header.index('num_articles')
-    mis_idx = expected_header.index('avg_misalignment')
-    wikis = set()
-    with gzip.open(MR_FN, 'rt') as fin:
-        header = next(fin).strip().split('\t')
-        assert header == expected_header
-        for line in fin:
-            line = line.strip().split('\t')
-            wiki = line[wiki_idx]
-            wikis.add(wiki)
-            region = line[region_idx]
-            if region not in MISALIGNMENT_REGION:
-                MISALIGNMENT_REGION[region] = {}
-            count = int(line[count_idx])
-            mis = float(line[mis_idx])
-            MISALIGNMENT_REGION[region][wiki] = (count, mis)
-
-    for region in MISALIGNMENT_REGION:
-        for w in wikis:
-            if w not in MISALIGNMENT_REGION[region]:  # possibly define a minimum sample size here too -- e.g., 30
-                MISALIGNMENT_REGION[region][w] = (0, '--')
-
-
 def load_quality_maxvals():
     maxval_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/misalignment/quality-max-featurevalues-by-wiki.tsv.gz'
     if not os.path.exists(MQV_FN):
@@ -906,29 +791,7 @@ def load_quality_maxvals():
                                    'c':max(MIN_MAX_CAT, cats),
                                    'w':max(MIN_MAX_LIN, links)}
 
-def load_demand_maxvals():
-    maxval_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/misalignment/demand-max-featurevalues-by-wiki.tsv.gz'
-    if not os.path.exists(MDV_FN):
-        urlretrieve(maxval_url, MDV_FN)
-    expected_header = ['wiki_db', '99p_monthly_pageviews']
-    wiki_idx = expected_header.index('wiki_db')
-    dem_idx = expected_header.index('99p_monthly_pageviews')
-    with gzip.open(MDV_FN, 'rt') as fin:
-        header = next(fin).strip().split('\t')
-        assert header == expected_header
-        for line in fin:
-            line = line.strip().split('\t')
-            lang = line[wiki_idx].replace('wiki', '')
-            if lang not in WIKIPEDIA_LANGUAGE_CODES:
-                continue
-            demand = float(line[dem_idx])
-            MAX_DEM_VALS[lang] = math.log10(max(MIN_MAX_PVS, demand+1))
-
-load_misalignment_topic_data()
-load_misalignment_geo_data()
 load_quality_maxvals()
-load_demand_maxvals()
-
 application = app
 
 if __name__ == '__main__':

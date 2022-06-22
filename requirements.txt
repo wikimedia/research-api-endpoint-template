@@ -2,6 +2,5 @@ Flask
 Flask-Cors
 mwapi
 mwparserfromhell
-mwviews
 PyYAML
 uWSGI
