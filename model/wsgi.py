@@ -680,7 +680,7 @@ def get_quality(lang, title=None, revid=None):
         categories_x = min(1, categories / MAX_QUAL_VALS[lang]['c'])
         refs_x = min(1, (refs / normed_page_length) / MAX_QUAL_VALS[lang]['r'])
         headings_x = min(1, (headings / normed_page_length) / MAX_QUAL_VALS[lang]['h'])
-        wikilinks_x = min(1, math.sqrt(wikilinks) / MAX_QUAL_VALS[lang]['w'])
+        wikilinks_x = min(1, (math.sqrt(wikilinks) / normed_page_length) / MAX_QUAL_VALS[lang]['w'])
         quality = ((COEF_LEN * length_x) + (COEF_MED * media_x) + (COEF_HEA * headings_x) +
                    (COEF_REF * refs_x) + (COEF_LIN * wikilinks_x) + (COEF_CAT * categories_x))
         return quality, {'raw':{'length (bytes)':page_length, 'references':refs, 'wikilinks':wikilinks,
