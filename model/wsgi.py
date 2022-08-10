@@ -614,19 +614,27 @@ def wikitext_to_features(wikitext, lang='en', level=3):
         med_prefixes = [m.lower() for m in MEDIA_PREFIXES + MEDIA_ALIASES.get(lang, [])]
         ref_singleton = re.compile(r'<ref(\s[^/>]*)?/>', re.M | re.I)
         ref_tag = re.compile(r'<ref(\s[^/>]*)?>[\s\S]*?</ref>', re.M | re.I)
+        # remove comments / lowercase for matching namespace prefixes better
         wikitext = re.sub(r'<!--.*?-->', '', wikitext, flags=re.DOTALL).lower()
 
         page_length = len(wikitext)
-        refs = len(ref_singleton.findall(wikitext)) + len(ref_tag.findall(wikitext))
+        num_refs = len(ref_singleton.findall(wikitext)) + len(ref_tag.findall(wikitext))
+        num_headings = len([1 for l in re.findall('(={2,})(.*?)(={2,})', wikitext) if len(l[0]) <= level])
         links = [m.split('|', maxsplit=1)[0] for m in re.findall(r'(?<=\[\[)(.*?)(?=]])', wikitext, flags=re.DOTALL)]
-        categories = len([1 for l in links if l.split(':', maxsplit=1)[0] in cat_prefixes])
-        media_bra = [l.split(':', maxsplit=1)[1] for l in links if l.split(':', maxsplit=1)[0] in med_prefixes]
+        num_categories = 0
+        media_bra = []
+        for l in links:
+            if ':' in l:
+                prefix, link_dest = l.split(':', maxsplit=1)
+                if prefix in cat_prefixes:
+                    num_categories += 1
+                elif prefix in med_prefixes:
+                    media_bra.append(link_dest)
+        num_wikilinks = len(links) - num_categories - len(media_bra)
         media_ext = [''.join(m).strip() for m in EXTEN_PATTERN.findall(wikitext) if len(m[0]) <= 240]
-        media = len(set(media_bra).union(set(media_ext)))
-        wikilinks = len(links) - categories - len(media_bra)
-        headings = len([1 for l in re.findall('(={2,})(.*?)(={2,})', wikitext) if len(l[0]) <= level])
+        num_media = len(set(media_bra).union(set(media_ext)))
 
-        return (page_length, refs, wikilinks, categories, media, headings)
+        return (page_length, num_refs, num_wikilinks, num_categories, num_media, num_headings)
     except Exception:
         return (0,0,0,0,0,0)
 
@@ -689,7 +697,10 @@ def get_quality(lang, title=None, revid=None):
                                        'categories':categories_x, 'media':media_x, 'headings':headings_x}}
     except Exception:
         traceback.print_exc()
-        return 0
+        return -1, {'raw': {'length (bytes)': -1, 'references': -1, 'wikilinks': -1,
+                                 'categories': -1, 'media': -1, 'headings': -1},
+                         'normalized': {'length (bytes)': -1, 'references': -1, 'wikilinks': -1,
+                                        'categories': -1, 'media': -1, 'headings': -1}}
 
 def get_canonical_page_title(title, lang):
     """Resolve redirects / normalization -- used to verify that an input page_title exists"""
