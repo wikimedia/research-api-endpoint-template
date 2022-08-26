@@ -84,7 +84,7 @@ def parse_html(article_obj):
             namespace_dist[l.namespace_id] = namespace_dist.get(l.namespace_id, 0) + 1
             if l.redlink:
                 num_redlinks += 1
-        num_external_links = parsed_article.get_externallinks()
+        num_external_links = len(parsed_article.get_externallinks())
         num_non_transcluded_catetgories = len([c for c in parsed_article.get_categories() if not c.transclusion])
         plaintext = parsed_article.get_plaintext(skip_transclusion=True, skip_categories=True)
         return plaintext, {'num_refs':num_refs, 'num_headings':num_headings, 'num_sections':num_sections,
@@ -98,7 +98,7 @@ def get_article_html(lang, title):
     """Get Parsoid HTML for article -- matches what's in Enterprise HTML dumps."""
     html_endpoint = f"https://{lang}.wikipedia.org/api/rest_v1/page/html/{title}"
     response = requests.get(html_endpoint, headers={'User-Agent': app.config['CUSTOM_UA']})
-    
+
     try:
         return response.text
     except Exception:
