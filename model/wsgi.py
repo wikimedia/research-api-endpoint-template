@@ -98,10 +98,9 @@ def get_article_html(lang, title):
     """Get Parsoid HTML for article -- matches what's in Enterprise HTML dumps."""
     html_endpoint = f"https://{lang}.wikipedia.org/api/rest_v1/page/html/{title}"
     response = requests.get(html_endpoint, headers={'User-Agent': app.config['CUSTOM_UA']})
-    result = response.json()
-
+    
     try:
-        return result['html']
+        return response.text
     except Exception:
         return ""
 
