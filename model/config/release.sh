@@ -26,6 +26,7 @@ source ${LIB_PATH}/p3env/bin/activate
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
+pip install -i https://test.pypi.org/simple/ --no-deps mwparserfromhtml
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."
