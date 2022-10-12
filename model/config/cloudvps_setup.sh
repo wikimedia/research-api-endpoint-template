@@ -3,7 +3,7 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='topicmodel'  # directory where repo code will go
+REPO_LBL='ml-article-desc'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -19,7 +19,7 @@ apt-get install -y nginx  # handles incoming requests, load balances, and passes
 apt-get install -y python3-pip  # install dependencies
 apt-get install -y python3-wheel  # make sure dependencies install correctly even when missing wheels
 apt-get install -y python3-venv  # for building virtualenv
-apt-get install -y python3-dev  # necessary for fasttext
+apt-get install -y python3-dev
 apt-get install -y uwsgi
 apt-get install -y uwsgi-plugin-python3
 # potentially add: apt-get install -y git python3 libpython3.7 python3-setuptools
@@ -41,7 +41,7 @@ echo "Cloning repositories..."
 
 # The simpler process is to just install dependencies per a requirements.txt file
 # With updates, however, the packages could change, leading to unexpected behavior or errors
-git clone --branch quality-article ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch mach-gen-art-descriptions ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel

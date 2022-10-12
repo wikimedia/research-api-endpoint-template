@@ -3,7 +3,7 @@ log_format private '[$time_local] "$request" $status $body_bytes_sent "$http_ref
 
 server {
     listen 80;  # default port 80; must match backend port selected when creating web proxy on Horizon
-    server_name misalignment.wmcloud.org;  # to create, see: https://wikitech.wikimedia.org/wiki/Help:Using_a_web_proxy_to_reach_Cloud_VPS_servers_from_the_internet
+    server_name ml-article-description-api.wmcloud.org ;  # to create, see: https://wikitech.wikimedia.org/wiki/Help:Using_a_web_proxy_to_reach_Cloud_VPS_servers_from_the_internet
     # remove this line or change 'private' to 'combined' to restore user-agent + IP information
     access_log /var/log/nginx/access.log private;
 
