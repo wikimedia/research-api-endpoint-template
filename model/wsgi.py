@@ -4,7 +4,8 @@ import traceback
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from mwedittypes import EditTypes, SimpleEditTypes
+from mwedittypes import StructuredEditTypes, SimpleEditTypes
+from mwedittypes.utils import full_diff_to_simple
 import mwapi
 import yaml
 
@@ -12,7 +13,30 @@ __dir__ = os.path.dirname(__file__)
 
 app = Flask(__name__)
 
-WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
+WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz',
+                            'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg',
+                            'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs',
+                            'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co',
+                            'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv',
+                            'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro',
+                            'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk',
+                            'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr',
+                            'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh',
+                            'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg',
+                            'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw',
+                            'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo',
+                            'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk',
+                            'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah',
+                            'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso',
+                            'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl',
+                            'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro',
+                            'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd',
+                            'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr',
+                            'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg',
+                            'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv',
+                            'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo',
+                            'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan',
+                            'zh-yue', 'zu']
 
 # load in app user-agent or any other app config
 app.config.update(
@@ -21,22 +45,39 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-@app.route('/api/v1/diff', methods=['GET'])
-@app.route('/api/v1/actions', methods=['GET'])
-def full_diff():
+
+@app.route('/diff-summary', methods=['GET'])
+def diff_summary():
     """Full version -- allow for testing API without breaking interface"""
     lang, revid, title, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
     else:
-        actions = get_actions(lang, revid, title, timeout=8)
+        prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
+        summary = get_summary(prev_wikitext, curr_wikitext, title)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'results': actions
+                  'results': summary
                   }
         return jsonify(result)
 
-@app.route('/api/v1/diff-debug', methods=['GET'])
-@app.route('/api/v1/actions-debug', methods=['GET'])
+
+@app.route('/diff-details', methods=['GET'])
+def diff_details():
+    """Full version -- allow for testing API without breaking interface"""
+    lang, revid, title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'error': error})
+    else:
+        prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
+        details, _ = get_details(prev_wikitext, curr_wikitext, title)
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
+                  'summary': full_diff_to_simple(details),
+                  'details': details_to_dict(details)
+                  }
+        return jsonify(result)
+
+
+@app.route('/diff-debug', methods=['GET'])
 def diff_debug():
     """Full diff, tree diff, and simple diff to compare."""
     lang, revid, title, error = validate_api_args()
@@ -46,17 +87,28 @@ def diff_debug():
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'}
         prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
         start = time.time()
-        differ = EditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=45)
-        actions = differ.get_diff()
-        result['full'] = {'actions': actions,
-                          'tree': differ.tree_diff,
-                          'elapsed-time (s)': time.time() - start}
+        details, tree_diff = get_details(prev_wikitext, curr_wikitext, title)
+        result['structured'] = {'details': details_to_dict(details),
+                                'summary': full_diff_to_simple(details),
+                                'tree': tree_diff,
+                                'elapsed-time (s)': time.time() - start}
         start = time.time()
-        differ = SimpleEditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=45)
-        actions = differ.get_diff()
-        result['simple'] = {'actions': actions,
+        summary = get_summary(prev_wikitext, curr_wikitext, title)
+        result['simple'] = {'summary': summary,
                             'elapsed-time (s)': time.time() - start}
         return jsonify(result)
+
+
+def details_to_dict(details):
+    expanded = {'context': [n._asdict() for n in details['context']],
+                'nodes': [n._asdict() for n in details['node-edits']],
+                'text': [n._asdict() for n in details['text-edits']]}
+    for n in expanded['nodes']:
+        for i in range(0, len(n['changes'])):
+            c = n['changes'][i]
+            n['changes'][i] = {'change-type': c[0], 'prev': c[1], 'curr': c[2]}
+    return expanded
+
 
 def get_wikitext(lang, revid, title, session=None):
     if session is None:
@@ -87,16 +139,30 @@ def get_wikitext(lang, revid, title, session=None):
 
     return prev_wikitext, curr_wikitext
 
-def get_actions(lang, revid, title, timeout=8, session=None):
-    """Get differ for ."""
-    prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title, session)
 
+def get_summary(prev_wikitext, curr_wikitext, lang):
+    """Get edit types summary."""
     try:
-        differ = EditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=timeout)
-        actions = differ.get_diff()
+        differ = SimpleEditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang)
+        summary = differ.get_diff()
     except Exception:
+        summary = None
         traceback.print_exc()
-    return actions
+    return summary
+
+
+def get_details(prev_wikitext, curr_wikitext, lang):
+    """Get detailed edit types list."""
+    try:
+        differ = StructuredEditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=False)
+        actions = differ.get_diff()
+        tree_diff = differ.tree_diff
+    except Exception:
+        actions = None
+        tree_diff = None
+        traceback.print_exc()
+    return actions, tree_diff
+
 
 def get_page_title(lang, revid, session=None):
     """Get page associated with a given revision ID"""
@@ -116,6 +182,7 @@ def get_page_title(lang, revid, session=None):
     else:
         return result['query']['pages'][0]['title']
 
+
 def validate_revid(revid):
     try:
         revid = int(revid)
@@ -126,8 +193,10 @@ def validate_revid(revid):
     except ValueError:
         return False
 
+
 def validate_lang(lang):
     return lang in WIKIPEDIA_LANGUAGE_CODES
+
 
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
@@ -147,10 +216,12 @@ def validate_api_args():
             error = f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"
         revid = request.args['revid']
         if not validate_revid(revid):
-            error = f"{revid} is not a valid revision ID -- e.g., 979988715 for https://en.wikipedia.org/w/index.php?oldid=979988715"
+            error = f"{revid} is not a valid revision ID -- e.g., 979988715 for " \
+                    "https://en.wikipedia.org/w/index.php?oldid=979988715"
         title = get_page_title(lang, revid)
 
     return lang, revid, title, error
+
 
 application = app
 
