@@ -100,14 +100,15 @@ def diff_debug():
 
 
 def details_to_dict(details):
-    expanded = {'context': [n._asdict() for n in details['context']],
-                'nodes': [n._asdict() for n in details['node-edits']],
-                'text': [n._asdict() for n in details['text-edits']]}
-    for n in expanded['nodes']:
-        for i in range(0, len(n['changes'])):
-            c = n['changes'][i]
-            n['changes'][i] = {'change-type': c[0], 'prev': c[1], 'curr': c[2]}
-    return expanded
+    if details is not None:
+        expanded = {'context': [n._asdict() for n in details['context']],
+                    'nodes': [n._asdict() for n in details['node-edits']],
+                    'text': [n._asdict() for n in details['text-edits']]}
+        for n in expanded['nodes']:
+            for i in range(0, len(n['changes'])):
+                c = n['changes'][i]
+                n['changes'][i] = {'change-type': c[0], 'prev': c[1], 'curr': c[2]}
+        return expanded
 
 
 def get_wikitext(lang, revid, title, session=None):
