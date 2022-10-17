@@ -56,7 +56,7 @@ def diff_summary():
         prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
         summary = get_summary(prev_wikitext, curr_wikitext, lang)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'results': summary
+                  'summary': summary
                   }
         return jsonify(result)
 
