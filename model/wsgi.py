@@ -54,7 +54,7 @@ def diff_summary():
         return jsonify({'error': error})
     else:
         prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
-        summary = get_summary(prev_wikitext, curr_wikitext, title)
+        summary = get_summary(prev_wikitext, curr_wikitext, lang)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'results': summary
                   }
@@ -69,7 +69,7 @@ def diff_details():
         return jsonify({'error': error})
     else:
         prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
-        details, _ = get_details(prev_wikitext, curr_wikitext, title)
+        details, _ = get_details(prev_wikitext, curr_wikitext, lang)
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
                   'summary': full_diff_to_simple(details) if details is not None else None,
                   'details': details_to_dict(details)
@@ -87,13 +87,13 @@ def diff_debug():
         result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'}
         prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
         start = time.time()
-        details, tree_diff = get_details(prev_wikitext, curr_wikitext, title)
+        details, tree_diff = get_details(prev_wikitext, curr_wikitext, lang)
         result['structured'] = {'details': details_to_dict(details),
                                 'summary': full_diff_to_simple(details) if details is not None else None,
                                 'tree': tree_diff,
                                 'elapsed-time (s)': time.time() - start}
         start = time.time()
-        summary = get_summary(prev_wikitext, curr_wikitext, title)
+        summary = get_summary(prev_wikitext, curr_wikitext, lang)
         result['simple'] = {'summary': summary,
                             'elapsed-time (s)': time.time() - start}
         return jsonify(result)
