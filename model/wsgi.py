@@ -32,22 +32,25 @@ def get_article_description():
     features = {}  # just used right now for debugging
     starttime = time.time()
 
-    first_paragraph = get_first_paragraph(lang, title)
-    # TODO whatever processing you apply to the wikitext
+    descriptions, sitelinks, instance_of, subclass_of = get_wikidata_info(lang, title)
+    wd_time = time.time()
+    execution_times['wikidata-info (s)'] = wd_time - starttime
+    features['descriptions'] = descriptions
+    features['instance-of'] = instance_of
+    features['subclass-of'] = subclass_of
+
+    first_paragraphs = {}
+    for l in sitelinks:
+        fp = get_first_paragraph(l, sitelinks[l])
+        # TODO whatever processing you apply to the wikitext
+        first_paragraphs[l] = fp
     fp_time = time.time()
-    execution_times['first-paragraph (s)'] = fp_time - starttime
-    features['first-paragraph'] = first_paragraph
+    execution_times['first-paragraph (s)'] = fp_time - wd_time
+    features['first-paragraphs'] = first_paragraphs
 
     groundtruth_desc = get_groundtruth(lang, title)
     gt_time = time.time()
     execution_times['groundtruth (s)'] = gt_time - fp_time
-
-    descriptions, instance_of, subclass_of = get_wikidata_info(lang, title)
-    wd_time = time.time()
-    execution_times['wikidata-info (s)'] = wd_time - gt_time
-    features['descriptions'] = descriptions
-    features['instance-of'] = instance_of
-    features['subclass-of'] = subclass_of
 
     execution_times['total (s)'] = time.time() - starttime
 
@@ -121,8 +124,9 @@ def get_wikidata_info(lang, title):
         sites=f"{lang}wiki",
         titles=title,
         redirects="yes",
-        props='descriptions|claims',
+        props='descriptions|claims|sitelinks',
         languages="|".join(SUPPORTED_WIKIPEDIA_LANGUAGE_CODES),
+        sitefilter="|".join([f'{l}wiki' for l in SUPPORTED_WIKIPEDIA_LANGUAGE_CODES]),
         format='json',
         formatversion=2
     )
@@ -130,6 +134,7 @@ def get_wikidata_info(lang, title):
     instance_of = []
     subclass_of = []
     descriptions = {}
+    sitelinks = {}
     try:
         # should be exactly 1 QID for the page if it has a Wikidata item
         qid = list(result['entities'].keys())[0]
@@ -148,10 +153,14 @@ def get_wikidata_info(lang, title):
                 subclass_of.append(claim['mainsnak']['datavalue']['value']['id'])
             except Exception:
                 continue
+        # get the sitelinks from supported languages
+        for wiki in result['entities'][qid]['sitelinks']:
+            lang = wiki[:-4]  # remove 'wiki' part
+            sitelinks[lang] = result['entities'][qid]['sitelinks'][wiki]['title']
     except Exception:
         pass
 
-    return descriptions, instance_of, subclass_of
+    return descriptions, sitelinks, instance_of, subclass_of
 
 def get_canonical_page_title(title, lang):
     """Resolve redirects / normalization -- used to verify that an input page_title exists and help future API calls"""
