@@ -38,9 +38,9 @@ WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', '
                             'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan',
                             'zh-yue', 'zu']
 
-COMPLEX_EDIT_TYPES = ['Template', 'Media', 'ExternalLink', 'Table']
+COMPLEX_EDIT_TYPES = ['Template', 'Media', 'Table']
 CONTEXT_TYPES = ['Section', 'Sentence', 'Paragraph']
-ANNOTATION_TYPES = ['Category', 'Wikilink']
+ANNOTATION_TYPES = ['Category', 'Wikilink', 'ExternalLink']
 # Word is a content type and handled explicitly in the function
 # also not included explicitly here are any generic Tags -- i.e. adding HTML tags to wikitext
 MAINTENANCE_TYPES = ['List',  # this is just the syntax -- e.g., adding a `*` to the start of a line
