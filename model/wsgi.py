@@ -38,6 +38,24 @@ WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', '
                             'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan',
                             'zh-yue', 'zu']
 
+COMPLEX_EDIT_TYPES = ['Template', 'Media', 'ExternalLink', 'Table']
+CONTEXT_TYPES = ['Section', 'Sentence', 'Paragraph']
+ANNOTATION_TYPES = ['Category', 'Wikilink']
+# Word is a content type and handled explicitly in the function
+# also not included explicitly here are any generic Tags -- i.e. adding HTML tags to wikitext
+MAINTENANCE_TYPES = ['List',  # this is just the syntax -- e.g., adding a `*` to the start of a line
+                     'Text Formatting', 'Punctuation',  # text changes that don't really impact meaning
+                     'Heading',  # structuring existing content
+                     'Reference',  # very important but not actual content
+                     'Comment']  # no impact on content
+CON_GEN = 'Content Generation'
+CON_MAI = 'Content Maintenance'
+CON_ANN = 'Content Annotation'
+
+EASY_TYPES = ['Whitespace', 'Punctuation', 'Word', 'Sentence', 'Paragraph', 'Section']
+MEDIUM_TYPES = ['Comment', 'List', 'Category', 'Wikilink', 'ExternalLink', 'Text Formatting', 'Heading']
+HARD_TYPES = ['Other Tag', 'Reference', 'Media', 'Table', 'Template']
+
 # load in app user-agent or any other app config
 app.config.update(
     yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
@@ -96,6 +114,21 @@ def diff_debug():
         summary = get_summary(prev_wikitext, curr_wikitext, lang)
         result['simple'] = {'summary': summary,
                             'elapsed-time (s)': time.time() - start}
+        try:
+            edit_categories = get_edit_categories(summary, details)
+        except Exception:
+            edit_categories = traceback.format_exc()
+        result['edit-categories'] = edit_categories
+        try:
+            edit_difficulty = simple_et_to_difficulty(summary)
+        except Exception:
+            edit_difficulty = traceback.format_exc()
+        result['edit-difficulty'] = edit_difficulty
+        try:
+            edit_size = simple_et_to_size(summary)
+        except Exception:
+            edit_size = traceback.format_exc()
+        result['edit-size'] = edit_size
         return jsonify(result)
 
 
@@ -163,6 +196,194 @@ def get_details(prev_wikitext, curr_wikitext, lang):
         tree_diff = None
         traceback.print_exc()
     return actions, tree_diff
+
+
+def get_edit_categories(summary, details=None):
+    edit_categories = simple_et_to_higher_level(summary)
+    if needs_structured(summary) and details is not None:
+            for cat, cnt in full_et_to_higher_level(details).items():
+                edit_categories[cat] = edit_categories.get(cat, 0) + cnt
+    return edit_categories
+
+
+def needs_structured(edit_types_summary):
+    """Determine if structured edit types need to be computed to make assessment."""
+    for et in COMPLEX_EDIT_TYPES:
+        if et in edit_types_summary:
+            return True
+    return False
+
+
+def full_et_to_higher_level(edit_types):
+    """Same as simple_et_to_higher_level but for more complex edit types."""
+    types = {}
+    for et in edit_types.get('node-edits', []):
+        if et.type in COMPLEX_EDIT_TYPES:
+            if et.type == 'Template':
+                # Templates:
+                # * Insert template w/o parameters: annotation (probably metadata but either
+                #   way the editor is connecting content not creating new content)
+                # * Move/remove template = maintenance
+                # * Change template by adding a new parameter = content creation;
+                #   otherwise content maintenance of existing content
+                if et.edittype == 'insert':
+                    con_gen = True
+                    for chg in et.changes:
+                        if chg['change-type'] == 'parameter':
+                            con_gen = False
+                            types[CON_ANN] = types.get(CON_ANN, 0) + 1
+                            break
+                    if con_gen:
+                        types[CON_GEN] = types.get(CON_GEN, 0) + 1
+                elif et.edittype in ['move', 'remove']:
+                    types[CON_MAI] = types.get(CON_MAI, 0) + 1
+                else:
+                    con_gen = False
+                    for chg in et.changes:
+                        if chg['change-type'] == 'parameter':
+                            if chg['prev'] is None or not chg['prev'][1]:
+                                con_gen = True
+                                break
+                    if con_gen:
+                        types[CON_GEN] = types.get(CON_GEN, 0) + 1
+                    else:
+                        types[CON_MAI] = types.get(CON_MAI, 0) + 1
+            elif et.type == 'Media':
+                # Media:
+                # * Insert media: content generation
+                # * Move/remove media = maintenance
+                # * Change media by adding a caption/alt text = content generation;
+                #   otherwise content maintenance
+                if et.edittype == 'insert':
+                    types[CON_GEN] = types.get(CON_GEN, 0) + 1
+                elif et.edittype in ['move', 'remove']:
+                    types[CON_MAI] = types.get(CON_MAI, 0) + 1
+                else:
+                    con_main = False
+                    for chg in et.changes:
+                        if chg['change-type'] == 'caption' and chg['prev'] is None:
+                            types[CON_GEN] = types.get(CON_GEN, 0) + 1
+                        elif chg['change-type'] == 'option':
+                            if chg['prev'] is None and chg['curr'].split('=', maxsplit=1)[0].strip().lower() == 'alt':
+                                types[CON_GEN] = types.get(CON_GEN, 0) + 1
+                        else:
+                            con_main = True
+                    if con_main:
+                        types[CON_MAI] = types.get(CON_MAI, 0) + 1
+            elif et.type == 'ExternalLink':
+                # External Link:
+                # * Insert = content annotation
+                # * Move/remove/change = content maintenance
+                if et.edittype == 'insert':
+                    types[CON_ANN] = types.get(CON_ANN, 0) + 1
+                else:
+                    types[CON_MAI] = types.get(CON_MAI, 0) + 1
+            elif et.type == 'Table':
+                # Table:
+                # * Insert = content creation
+                # * Move/remove = content maintenance
+                # * Change = creation if adding cells; otherwise maintenance
+                if et.edittype == 'insert':
+                    types[CON_GEN] = types.get(CON_GEN, 0) + 1
+                elif et.edittype in ['move', 'remove']:
+                    types[CON_MAI] = types.get(CON_MAI, 0) + 1
+                else:
+                    con_gen = False
+                    con_mai = False
+                    for chg in et.changes:
+                        if chg['change-type'] == 'caption' and chg['prev'] is None:
+                            con_gen = True
+                        elif chg['change-type'] == 'cells':
+                            if chg['prev'] == 'insert':
+                                con_gen = True
+                            else:
+                                con_mai = True
+                        else:
+                            con_mai = True
+                    if con_gen:
+                        types[CON_GEN] = types.get(CON_GEN, 0) + 1
+                    if con_mai:
+                        types[CON_MAI] = types.get(CON_MAI, 0) + 1
+    return types
+
+def simple_et_to_size(summary):
+    changes = 0
+    for et in summary:
+        if et not in CONTEXT_TYPES:
+            for chgtype in summary[et]:
+                changes += summary[et][chgtype]
+
+    size = 'Small'
+    if changes > 20:
+        size = 'Large'
+    elif changes > 10:
+        size = 'Medium-Large'
+    elif changes > 5:
+        size = 'Small-Medium'
+    return size
+
+
+def simple_et_to_difficulty(summary):
+    difficulty_level = 'Easy'
+    for et in summary:
+        if et in MEDIUM_TYPES and difficulty_level.startswith('Easy'):
+            if 'insert' in summary[et]:
+                difficulty_level = 'Medium-Hard'
+            else:
+                difficulty_level = 'Easy-Medium'
+        elif et in HARD_TYPES:
+            difficulty_level = 'Hard'
+            break
+    return difficulty_level
+
+
+def simple_et_to_higher_level(summary):
+    """
+    For simple edits, map a revision's atomic edit types to a higher-level taxonomy of edit categories:
+    * Content Generation (gen): adding new information
+    * Content Annotation (ann): adding new metadata
+    * Content Maintenance (mai): cleaning existing content
+
+    NOTE: for complex edit types, the edit category is calculated separately with more info.
+    """
+    types = {}
+    # If just whitespace and optionally section/paragraph/sentence -> whitespace only
+    if 'Whitespace' in summary and len(summary) <= 4:
+        whitespace_only = True
+        for et in summary:
+            if et not in CONTEXT_TYPES and et != 'Whitespace':
+                whitespace_only = False
+                break
+        if whitespace_only:
+            return {CON_MAI: 1}
+
+    for et in summary:
+        # contextual information: not relevant
+        # complex nodes handled in other function
+        if et in CONTEXT_TYPES or et in COMPLEX_EDIT_TYPES:
+            continue
+        # punctuation w/o words = content maintenance; otherwise ignore punctuation component
+        elif et == 'Punctuation' and 'Word' not in summary:
+            types[CON_MAI] = types.get(CON_MAI, 0) + 1
+        elif et in ANNOTATION_TYPES:
+            ann_ets = summary[et]
+            if 'change' in ann_ets or 'remove' in ann_ets or 'move' in ann_ets:
+                types[CON_MAI] = types.get(CON_MAI, 0) + 1
+            if 'insert' in ann_ets:
+                types[CON_ANN] = types.get(CON_ANN, 0) + 1
+        elif et in MAINTENANCE_TYPES:
+            types[CON_MAI] = types.get(CON_MAI, 0) + 1
+        elif et == 'Word':
+            sent_ets = summary.get('Sentence', {})
+            new_sentences = sent_ets.get('insert', 0)
+            if new_sentences:
+                types[CON_GEN] = types.get(CON_GEN, 0) + new_sentences
+            if 'change' in sent_ets or 'remove' in sent_ets or 'move' in sent_ets:
+                types[CON_MAI] = types.get(CON_MAI, 0) + 1
+        elif et == 'Other Tag':
+            types[CON_MAI] = types.get(CON_MAI, 0) + 1
+
+    return types
 
 
 def get_page_title(lang, revid, session=None):
