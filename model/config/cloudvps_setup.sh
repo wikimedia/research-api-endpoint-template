@@ -5,7 +5,8 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/region_groundtruth_2021_03_01_expanded.tsv.bz2'
+MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/geography/countries_wikidata_groundtruth_2022_03_07.sqlite'
+REGIONS_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/geography/regions.tsv'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -45,10 +46,12 @@ echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-echo "Downloading model, hang on..."
+echo "Downloading data, hang on..."
 cd ${TMP_PATH}
-wget -O region_groundtruth.tsv.bz2 ${MODEL_WGET}
-mv region_groundtruth.tsv.bz2 ${ETC_PATH}/resources
+wget -O country_groundtruth.sqlite ${MODEL_WGET}
+mv country_groundtruth.sqlite ${ETC_PATH}/resources
+wget -O regions.tsv ${REGIONS_WGET}
+mv regions.tsv ${ETC_PATH}/resources
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
