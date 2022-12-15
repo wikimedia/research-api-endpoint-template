@@ -1,9 +1,8 @@
-import bz2
 import csv
 import os
 import re
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mwapi
 from mwconstants import WIKIPEDIA_LANGUAGES
@@ -57,16 +56,17 @@ def get_regions(links=False):
 def qid_to_regions(qid, region=True, subcontinent=True, continent=True, global_ns=True):
     regions = []
     for r in get_groundtruth(qid):
-        result = {}
-        if region:
-            result['region'] = r
-        if subcontinent:
-            result['subcontinent'] = REGION_TO_AGGS[r]['subcontinent']
-        if continent:
-            result['continent'] = REGION_TO_AGGS[r]['continent']
-        if global_ns:
-            result['global_ns'] = REGION_TO_AGGS[r]['global_ns']
-        regions.append(result)
+        if r:
+            result = {}
+            if region:
+                result['region'] = r
+            if subcontinent:
+                result['subcontinent'] = REGION_TO_AGGS[r]['subcontinent']
+            if continent:
+                result['continent'] = REGION_TO_AGGS[r]['continent']
+            if global_ns:
+                result['global_ns'] = REGION_TO_AGGS[r]['global_ns']
+            regions.append(result)
     return regions
 
 def get_groundtruth(qid):
