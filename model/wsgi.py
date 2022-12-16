@@ -90,11 +90,10 @@ def load_model():
         EXAMPLE_MODEL[letter] = 'vowel'
     logging.info(f"Model loaded: {EXAMPLE_MODEL}")
 
-application = app
 load_model()
 
 if __name__ == '__main__':
-    application.run()
+    app.run()
 else:
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
