@@ -40,4 +40,4 @@ errorlog = '/var/log/gunicorn/error.log'
 loglevel = 'info'
 # What information to log -- default to privacy-preserving
 # https://docs.gunicorn.org/en/stable/settings.html#access-log-format
-access_log_format = '%(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(T)s"'
+access_log_format = '%(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(M)s"'
