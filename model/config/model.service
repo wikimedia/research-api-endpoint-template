@@ -3,7 +3,7 @@ Description=Research API service
 After=syslog.target
 
 [Service]
-ExecStart=/usr/bin/uwsgi --ini /etc/api-endpoint/uwsgi.ini
+ExecStart=/var/lib/api-endpoint/p3env/bin/gunicorn --config /etc/api-endpoint/gunicorn.conf.py
 User=www-data
 Group=www-data
 Restart=always

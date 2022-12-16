@@ -13,15 +13,16 @@ your instance and use the `cloudvps_setup.sh` script to get a basic API setup --
 * `sudo ./cloudvps_setup.sh`
 
 The basic components of the API are as follows:
-* systemd: Linux service manager that we configure to start up nginx (listen for user requests) and uwsgi (listen for nginx requests). Controlled via `systemctl` utility. Configuration provided in `config/model.service`.
-* nginx: handles incoming user requests (someone visits your URL), does load balancing, and sends them via uwsgi to be handled. We keep this lightweight so it just passes messages as opposed to handling heavy processing so one incoming request doesn't stall another. Configuration provided in `config/model.nginx`.
-* uwsgi: service / protocol through which requests are passed by nginx to the application. This happens via a unix socket. Configuration provided in `config/uwsgi.ini`.
-* flask: Python library that can handle uwsgi requests, do the processing, and serve back responses. Configuration provided in `wsgi.py`
+* systemd: Linux service manager that we configure to start up nginx (listen for user requests) and gunicorn (listen for nginx requests). Controlled via `systemctl` utility. Configuration provided in `config/model.service`.
+* nginx: handles incoming user requests (someone visits your URL), does load balancing, and sends them to gunicorn to be handled. We keep this lightweight so it just passes messages as opposed to handling heavy processing so one incoming request doesn't stall another. Configuration provided in `config/model.nginx`.
+* gunicorn: service through which requests are passed by nginx to the application. This happens via a unix socket. Configuration provided in `config/gunicorn.conf.py`.
+* flask: Python library that can handle gunicorn requests, do the processing, and serve back responses. Configuration provided in `wsgi.py`
 
 ### Data collection
 The default logging by nginx builds an access log located at `/var/log/nginx/access.log` that logs IP, timestamp, referer, request, and user_agent information.
 I have overridden that in this repository to remove IP and user-agent so as not to retain private data unnecessariliy.
 This can be [updated easily](https://docs.nginx.com/nginx/admin-guide/monitoring/logging/#setting-up-the-access-log).
+Gunicorn also has access logging located at `/var/log/gunicorn/access.log` that logs similar information (and also has simplified for privacy reasons).
 
 ### Privacy and encryption
 For encryption, there are two important components to this:
@@ -33,8 +34,8 @@ Additionally, [CORS](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing
 ### Debugging
 Various commands can be checked to see why your API isn't working:
 * `sudo less /var/log/nginx/error.log`: nginx errors
-* `sudo systemctl status model`: success at getting uWSGI service up and running to pass nginx requests to flask (generally badd uwsgi.ini file)
-* `sudo less /var/log/uwsgi/uwsgi.log`: inspect uWSGI log for startup and handling requests (this is where you're often find Python errors that crashed the service)
+* `sudo systemctl status model`: success at getting gunicorn service up and running to pass nginx requests to flask (generally bad `gunicorn.conf.py` file)
+* `sudo less /var/log/gunicorn/error.log`: inspect gunicorn error log for startup and handling requests (this is where you'll often find Python errors that crashed the service)
 
 ### Adapting to a new model etc.
 You will probably have to change the following components:
@@ -42,15 +43,15 @@ You will probably have to change the following components:
 * `flask_config.yaml`: any Flask config variables that need to be set.
 * `model/config/cloudvps_setup.sh`: you likely will have to change some of the parameters at the top of the file and how you download any larger data/model files. Likewise, `model/config/release.sh` and `model/config/new_data.sh` will need to be updated in a similar manner.
 * `model/config/model.nginx`: server name will need to be updated to your instance / proxy (set in Horizon)
-* `model/config/uwsgi.ini`: potentially update number of processes and virtualenv location
+* `model/config/gunicorn.conf.py`: potentially update number of processes and virtualenv location
 * `model/config/model.service`: potentially update description, though this won't affect the API
 * `requirements.txt`: update to include your Python dependencies
-* Currently `setup.py` is not used, but it would need to be updated in a more complete package system.
 
 ### Managing large files
 A common dependency for these APIs is some sort of trained machine-learning model or database. The following scenarios assume the file originates on the [stat100x machines](https://wikitech.wikimedia.org/wiki/Analytics/Systems/Clients) and can be made public. If the file is a research dataset that would be valuable as a public resource, doing a formal [data release](https://wikitech.wikimedia.org/wiki/Data_releases) and uploading to Figshare or a related site is likely the best solution.
 * Small (e.g., <1GB), temporary: probably easiest to just scp these files to your local laptop and then back up to the Cloud VPS instance.
 * Large (e.g., <20GB), temporary: use the [web publication](https://wikitech.wikimedia.org/wiki/Analytics/Web_publication) process to make available in the one-off folder and then `wget` the file to your Cloud VPS instance. You can then remove it from the web publication folder.
+  * NOTE: unfortunately web downloads of large files from the Analytics server sometimes fail so you might have to resort to scp. 
 * Really large: talk to analytics.
 
 ### What this template is not
@@ -61,4 +62,4 @@ For a much simpler combined API endpoint + UI for interacting with it, you can a
 though you will also have much less control over the memory / disk / CPUs available to you.
 
 ### Acknowledgements
-Built largely from a mixture of <https://github.com/wikimedia/research-recommendation-api> and <https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-uwsgi-and-nginx-on-ubuntu-20-04>.
+Built largely from a mixture of <https://github.com/wikimedia/research-recommendation-api> and <https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-gunicorn-and-nginx-on-ubuntu-18-04>.
