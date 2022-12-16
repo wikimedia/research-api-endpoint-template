@@ -9,7 +9,7 @@ bind = 'unix:/srv/api-endpoint/sock/model.sock'
 
 # make socket owner/group readable/writable so nginx can use
 # https://docs.gunicorn.org/en/stable/settings.html#umask
-umask = '007'
+umask = 7
 
 # more workers = less stallilng during IO operations
 # if application is CPU-bound, this might as well just match the number of CPUs
