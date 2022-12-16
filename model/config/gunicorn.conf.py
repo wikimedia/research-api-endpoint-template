@@ -1,12 +1,14 @@
 import multiprocessing
 
+# Make sure gunicorn can find app
+# https://docs.gunicorn.org/en/stable/settings.html#chdir
+chdir = '/etc/api-endpoint/'
 # https://docs.gunicorn.org/en/stable/settings.html#wsgi-app
-wsgi_app = '/etc/api-endpoint/wsgi:app'
+wsgi_app = 'wsgi:app'
 
 # unix socket where gunicorn will talk with nginx (must match model.nginx)
 # https://docs.gunicorn.org/en/stable/settings.html#bind
 bind = 'unix:/srv/api-endpoint/sock/model.sock'
-
 # make socket owner/group readable/writable so nginx can use
 # https://docs.gunicorn.org/en/stable/settings.html#umask
 umask = 7
@@ -30,11 +32,9 @@ preload_app = True
 # Where to log requests to -- must match cloudvps_setup.sh $LOG_PATH directory
 # https://docs.gunicorn.org/en/stable/settings.html#accesslog
 accesslog = '/var/log/gunicorn/access.log'
-
 # Where to log errors to -- must match cloudvps_setup.sh $LOG_PATH directory
 # https://docs.gunicorn.org/en/stable/settings.html#errorlog
 errorlog = '/var/log/gunicorn/error.log'
-
 # Level of logging: 'debug', 'info', 'warning', 'error', 'critical'
 # https://docs.gunicorn.org/en/stable/settings.html#loglevel
 loglevel = 'info'
