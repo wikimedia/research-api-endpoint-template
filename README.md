@@ -34,8 +34,15 @@ Additionally, [CORS](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing
 ### Debugging
 Various commands can be checked to see why your API isn't working:
 * `sudo less /var/log/nginx/error.log`: nginx errors
-* `sudo systemctl status model`: success at getting gunicorn service up and running to pass nginx requests to flask (generally bad `gunicorn.conf.py` file)
+* `sudo systemctl status model`: success at getting gunicorn service up and running to pass nginx requests to flask (generally bad `gunicorn.conf.py` file).
+  * If the model is failing without interpretable error messages, just try running the `ExecStart` via command-line with the right user group and see what happens -- e.g., `sudo -- sudo -u www-data /var/lib/api-endpoint/p3env/bin/gunicorn --config /etc/api-endpoint/gunicorn.conf.py`
 * `sudo less /var/log/gunicorn/error.log`: inspect gunicorn error log for startup and handling requests (this is where you'll often find Python errors that crashed the service)
+
+#### Common Issues
+* If you're using a PyTorch model, it does play well with shared memory. See comments in `gunicorn.conf.py` for config changes to try.
+* Running out of hard-drive space: move model files to a [Cinder volume](https://wikitech.wikimedia.org/wiki/Help:Adding_Disk_Space_to_Cloud_VPS_instances#Cinder)
+* Model keeps restarting without fully loading: you may need to extend the timeout -- see `gunicorn.conf.py`.
+* Model startup fails quickly: probably permissions errors. Run via command-line (see Debugging above) to help identify problematic files.
 
 ### Adapting to a new model etc.
 You will probably have to change the following components:
