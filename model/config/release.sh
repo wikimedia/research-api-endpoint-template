@@ -3,9 +3,9 @@
 
 # these should match the variables in cloudvps_setup.sh
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='repo'  # directory where repo code will go
+REPO_LBL='art-gen-queue'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-GIT_BRANCH='gunicorn'
+GIT_BRANCH='art-gen-queue'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -26,7 +26,7 @@ source ${LIB_PATH}/p3env/bin/activate
 
 echo "Installing repositories..."
 pip install wheel
-pip install gunicorn
+pip install gunicorn[gevent]
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
@@ -40,6 +40,9 @@ if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model
 fi
 ln -s /etc/nginx/sites-available/model /etc/nginx/sites-enabled/
+
+echo "Pre-loading cache -- this could take a while"
+python ${ETC_PATH}/wsgi.py --k 3
 
 echo "Enabling and starting services..."
 systemctl enable model.service  # uwsgi starts when server starts up

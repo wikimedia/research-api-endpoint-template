@@ -3,13 +3,8 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='repo'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-# model binary / data -- ndownloader.figshare is a good host
-# alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
-# for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
-MODEL_WGET='...'
-GIT_BRANCH='gunicorn'
+GIT_BRANCH='art-gen-queue'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -44,17 +39,12 @@ python3 -m venv ${LIB_PATH}/p3env
 source ${LIB_PATH}/p3env/bin/activate
 
 echo "Cloning repositories..."
-git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
 
 echo "Installing repositories..."
 pip install wheel
-pip install gunicorn
-pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
-
-#echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+pip install gunicorn[gevent]
+pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
@@ -63,15 +53,18 @@ chown -R www-data:www-data ${LOG_PATH}
 chown -R www-data:www-data ${LIB_PATH}
 
 echo "Copying configuration files..."
-cp ${TMP_PATH}/${REPO_LBL}/model/config/gunicorn.conf.py ${ETC_PATH}
-cp ${TMP_PATH}/${REPO_LBL}/model/wsgi.py ${ETC_PATH}
-cp ${TMP_PATH}/${REPO_LBL}/model/flask_config.yaml ${ETC_PATH}
-cp ${TMP_PATH}/${REPO_LBL}/model/config/model.service /etc/systemd/system/
-cp ${TMP_PATH}/${REPO_LBL}/model/config/model.nginx /etc/nginx/sites-available/model
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/gunicorn.conf.py ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/wsgi.py ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/flask_config.yaml ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model
 fi
 ln -s /etc/nginx/sites-available/model /etc/nginx/sites-enabled/
+
+echo "Pre-loading cache -- this could take a while"
+python ${ETC_PATH}/wsgi.py --k 3
 
 echo "Enabling and starting services..."
 systemctl enable model.service  # uwsgi starts when server starts up

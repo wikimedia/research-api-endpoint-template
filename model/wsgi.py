@@ -1,9 +1,13 @@
+import argparse
 import logging
 import os
+import time
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mwapi
+import persistqueue
+import requests
 import yaml
 
 app = Flask(__name__)
@@ -16,84 +20,192 @@ app.config.update(yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml')
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-# fast-text model for making predictions
-EXAMPLE_MODEL = {}
+LANGS = set()
 
-@app.route('/api/v1/example', methods=['GET'])
-def article_starts_with_vowel():
-    """API endpoint. Takes inputs from request URL and returns JSON with outputs."""
-    lang, page_title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
-    else:
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title}',
-                  'first-letter': EXAMPLE_MODEL.get(page_title[0].lower(), 'consonant')
-                  }
-        logging.debug(result)
-        return jsonify(result)
+# Utils
+def lang_to_queue_path(lang):
+    """Map a language to a directory containing the necessary SQLite DB files etc."""
+    return f'{lang}-queue'
 
-
-@app.route('/api/v1/bad-example', methods=['GET'])
-def throw_an_error():
-    """API endpoint. Takes inputs from request URL and returns JSON with outputs."""
+def get_supported_languages():
+    model_url = 'https://ml-article-description-api.wmcloud.org/supported-languages'
     try:
-        3 / 0
-    except ZeroDivisionError:
-        logging.error("Three can't be divided by zero.")
-        raise Exception
+        response = requests.get(model_url, headers={'User-Agent': 'android-article-queue'})
+        result = response.json()
+        return set(result['languages'])
+    except Exception:
+        return set()
 
-def get_canonical_page_title(title, lang, session=None):
-    """Resolve redirects / normalization -- used to verify that an input page_title exists"""
-    if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+def get_queue(lang):
+    return persistqueue.SQLiteQueue(lang_to_queue_path(lang), auto_commit=True)
 
-    result = session.get(
-        action="query",
-        prop="info",
-        inprop='',
-        redirects='',
-        titles=title,
-        format='json',
-        formatversion=2
-    )
-    if 'missing' in result['query']['pages'][0]:
-        return None
-    else:
-        return result['query']['pages'][0]['title']
+def instantiate_queues():
+    """Set-up the necessary language queues."""
+    global LANGS
+    LANGS = set()
+    for lang in get_supported_languages():
+        LANGS.add(lang)
+        q = get_queue(lang)
+        if q.size > 0:
+            logging.info(f"{q.size} items already in {lang} queue.")
+    logging.info(f'queues instantiated for: {LANGS}.')
 
-def validate_api_args():
-    """Validate API arguments for language-agnostic model."""
-    error = None
-    lang = None
-    page_title = None
-    if request.args.get('title') and request.args.get('lang'):
-        lang = request.args['lang']
-        page_title = get_canonical_page_title(request.args['title'], lang)
-        if page_title is None:
-            error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, request.args['title'])
-    elif request.args.get('lang'):
-        error = 'missing an article title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-    elif request.args.get('title'):
-        error = 'missing a language -- e.g., "en" for English'
-    else:
-        error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
+def add_article_to_queue(lang, k=1):
+    """Add up to k articles to queue."""
+    articles = get_random_articles(lang, k=k)
+    for article in articles:
+        result = query_model(lang, article)
+        if result['prediction']:
+            queue.put(result)
 
-    return lang, page_title, error
 
-def load_model():
-    """Start-up function to load in model or other dependencies.
+@app.route('/api/health', methods=['GET'])
+def get_queue_info():
+    """Quick check that API is functioning and status of queues."""
+    queue_sizes = {}
+    for lang in LANGS:
+        queue = get_queue(lang)
+        queue_sizes[lang] = queue.size
+    return jsonify({'alive':True, 'queue-sizes':queue_sizes})
 
-    A common template is loading a data file or model into memory.
-    os.path.join(__dir__, 'filename')) is your friend.
+
+@app.route('/api/get-recommendation', methods=['GET'])
+def get_recommendation():
+    """Get recommendation.
+
+    If queue size > 0, retrieve top item (fast). Otherwise query API (slow).
+
+    TODO: post-action that adds new article to queue in background.
     """
-    for letter in 'aeiou':
-        EXAMPLE_MODEL[letter] = 'vowel'
-    logging.info(f"Model loaded: {EXAMPLE_MODEL}")
+    lang = request.args.get('lang')
+    blp_ok = request.args.get('blp')
+    if lang in LANGS:
+        queue = get_queue(lang)
+        checked = 0
+        while checked < queue.size:
+            recommendation = queue.get()
+            checked += 1
+            if blp_ok or not recommendation.get('blp'):
+                return jsonify(recommendation)
+            else:
+                queue.put(recommendation)
 
-load_model()
+        # queue failed -- query API directly and return
+        # any more than 4 articles probably exceeds timeout anyways
+        articles = get_random_articles(lang, k=4)
+        recommendation = None
+        for article in articles:
+            try:
+                result = query_model(lang, article)
+                if result['prediction'] and (blp_ok or not result.get('blp')):
+                    recommendation = result
+                    break
+            except Exception:
+                continue
+        return jsonify(recommendation)
+
+def get_random_articles(lang, k=1):
+    """Simulates process of generating Wikidata items to be recommended for descriptions in the Android App.
+    Based on this code: https://github.com/wikimedia/mediawiki-services-recommendation-api/blob/master/lib/description.js
+
+    Parameters:
+        lang: target wiki for descriptions -- e.g., en -> English Wikipedia; ar -> Arabic Wikipedia
+    """
+    # start with set of random candidate articles from that wiki
+    lang_session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
+    CANDIDATE_QUERY_BASE = {
+        'action': 'query',
+        'generator': 'random',
+        'redirects': 1,
+        'grnnamespace': 0,
+        'grnlimit': 10,  # up to 50 in single call; 10 should be sufficient to guarantee at least 1 final rec
+        'prop': 'pageprops|description|info',
+        'inprop': 'protection',
+        'formatversion':2,
+        'format':'json'
+    }
+    candidates = lang_session.get(**CANDIDATE_QUERY_BASE)
+    # filter to just acceptable articles:
+    # * no disambiguation pages
+    # * article must have Wikidata item
+    # * no existing description (Wikidata or local override)
+    # * no page protection on Wikipedia
+    recommendations = {}  # qid -> title
+    for c in candidates['query']['pages']:
+        if 'pageprops' not in c:
+            continue
+        elif 'disambiguation' in c['pageprops']:
+            continue
+        elif not c['pageprops'].get('wikibase_item'):
+            continue
+        elif 'description' in c:
+            continue
+        elif c['protection']:
+            continue
+        else:
+            recommendations[c['pageprops']['wikibase_item']] = c['title']  # c['pageid']
+
+    if recommendations:
+        # remove articles with protected Wikidata items
+        wd_session = mwapi.Session('https://wikidata.org', user_agent=app.config['CUSTOM_UA'])
+        WDPP_QUERY_BASE = {
+            'action': 'query',
+            'prop': 'info',
+            'inprop': 'protection',
+            'formatversion': 2,
+            'format': 'json',
+            'titles': '|'.join(recommendations.keys())
+        }
+        wdpp = wd_session.get(**WDPP_QUERY_BASE)
+        for item in wdpp['query']['pages']:
+            if item.get('protection'):
+                recommendations.pop(item['title'])
+
+        return list(recommendations.values())[:k]
+    else:
+        return list()
+
+
+def query_model(lang, article):
+    """Get predicted article descriptions from model API."""
+    # https://ml-article-description-api.wmcloud.org/article?lang=en&title=Philosophy&num_beams=3
+    model_url = 'https://ml-article-description-api.wmcloud.org/article'
+    params = {'lang': lang, 'title': article, 'num_beams':3}
+    try:
+        response = requests.get(model_url, params=params, headers={'User-Agent': 'android-article-queue'})
+        result = response.json()
+        return result
+    except Exception:
+        return {'lang':lang, 'title':article, 'prediction':[]}
+
+
+instantiate_queues()
 
 if __name__ == '__main__':
-    app.run()
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument('--k', default=0, type=int, help='number of articles per language to pre-cache')
+    argparser.add_argument('--vacuum', default=False, action="store_true", help='vacuum DBs to save HD')
+    args = argparser.parse_args()
+
+    langs = LANGS if LANGS else get_supported_languages()
+    if args.vacuum:
+        print(f"Vacuuming queues: {langs}.")
+        vac_start_time = time.time()
+        for lang in langs:
+            queue = get_queue(lang)
+            queue.shrink_disk_usage()
+        print(f"Vacuuming complete after {time.time() - vac_start_time:.1f} seconds.")
+
+    num_precache = args.k
+    print(f'Pre-caching {num_precache} predictions for {len(langs)} languages.')
+    cache_start_time = time.time()
+    for _ in range(0, num_precache):
+        for lang in langs:
+            queue = get_queue(lang)
+            if queue.size < num_precache:
+                add_article_to_queue(lang, k=3)  # do 3 at a time; good balance
+    print(f'Pre-caching complete after {(time.time() - cache_start_time) / 60:.1f} minutes.')
+
 else:
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
