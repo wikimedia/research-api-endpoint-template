@@ -1,5 +1,7 @@
 import multiprocessing
 
+# from wsgi import add_article_to_queue
+
 # Make sure gunicorn can find app
 # https://docs.gunicorn.org/en/stable/settings.html#chdir
 chdir = '/etc/api-endpoint/'
@@ -27,7 +29,10 @@ workers = (multiprocessing.cpu_count() * 2) + 1
 # Then also need to do `pip install gunicorn[gevent]` instead of `pip install gunicorn`
 # https://docs.gunicorn.org/en/stable/settings.html#worker-class
 # Also see for discussion of workers/threads: https://stackoverflow.com/a/41696500
-worker_class = 'gevent'
+# worker_class = 'gevent'
+
+#def post_request(worker, req, environ, resp):
+#    pass  # TODO add_article_to_queue
 
 # Workers silent for more than this many seconds are killed and restarted
 # https://docs.gunicorn.org/en/stable/settings.html#timeout
