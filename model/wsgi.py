@@ -25,7 +25,7 @@ LANGS = set()
 # Utils
 def lang_to_queue_path(lang):
     """Map a language to a directory containing the necessary SQLite DB files etc."""
-    return f'{lang}-queue'
+    return f'/etc/api-endpoint/{lang}-queue'
 
 def get_supported_languages():
     model_url = 'https://ml-article-description-api.wmcloud.org/supported-languages'
