@@ -3,7 +3,7 @@ Description=Public Turnilo service
 After=syslog.target
 
 [Service]
-ExecStart=turnilo --config /etc/api-endpoint/config.yaml
+ExecStart=turnilo run-config /etc/api-endpoint/config.yaml
 User=www-data
 Group=www-data
 Restart=always
