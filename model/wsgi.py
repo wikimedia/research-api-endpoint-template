@@ -4,8 +4,11 @@ import re
 import pickle
 
 from annoy import AnnoyIndex
-from flask import Flask, request, jsonify, render_template
+import fasttext
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+import mwapi
+from mwconstants import WIKIPEDIA_LANGUAGES
 import requests
 import yaml
 
@@ -25,8 +28,13 @@ ANNOY_INDEX = AnnoyIndex(50, 'angular')
 QID_TO_IDX = {}
 IDX_TO_QID = {}
 K_MAX = 500  # maximum number of neighbors (even if submitted argument is larger)
-
-WIKIPEDIA_LANGUAGE_CODES = {'aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu'}
+EMB_DIR = '/extrastorage'
+try:
+    FT_MODEL = fasttext.load_model(os.path.join(EMB_DIR, 'model.bin'))
+    print(f'fastText model loaded: {FT_MODEL.get_dimension()}-dimensional vectors and {len(FT_MODEL.words)} QIDs in vocab.')
+except Exception:
+    FT_MODEL = None
+    print("No fastText model found -- input QIDs must already exist in Annoy index.")
 
 @app.route('/api/v1/outlinks', methods=['GET'])
 def get_neighbors():
@@ -35,76 +43,26 @@ def get_neighbors():
     if 'error' in args:
         return jsonify({'Error': args['error']})
     else:
-        qid_idx = QID_TO_IDX[args['qid']]
         results = []
-        for idx, dist in zip(*ANNOY_INDEX.get_nns_by_item(qid_idx, args['k'], include_distances=True)):
-            sim = 1 - dist
-            if sim >= args['threshold']:  #  and idx != qid_idx
-                results.append({'qid':IDX_TO_QID[idx], 'score':sim})
-            else:
-                break
+        if args['qid'] in QID_TO_IDX:
+            qid_idx = QID_TO_IDX[args['qid']]
+            for idx, dist in zip(*ANNOY_INDEX.get_nns_by_item(qid_idx, args['k'], include_distances=True)):
+                sim = 1 - dist
+                if sim >= args['threshold']:  #  and idx != qid_idx
+                    results.append({'qid':IDX_TO_QID[idx], 'score':sim})
+                else:
+                    break
+        else:
+            emb = item_to_embedding(args['qid'])
+            if emb is not None:
+                for idx, dist in zip(*ANNOY_INDEX.get_nns_by_vector(emb, args['k'], include_distances=True)):
+                    sim = 1 - dist
+                    if sim >= args['threshold']:  # and idx != qid_idx
+                        results.append({'qid': IDX_TO_QID[idx], 'score': sim})
+                    else:
+                        break
         add_article_titles(args['lang'], results)
         return jsonify(results)
-
-@app.route('/api/v1/outlinks-interactive', methods=['GET'])
-def get_neighbors_interactive():
-    """Interactive Wikipedia-based topic modeling endpoint. Takes positive/negative constraints on list."""
-    args = parse_args_interactive()
-    if 'error' in args:
-        return jsonify({'Error': args['error']})
-    else:
-        search_k = int(args['k'] * ANNOY_INDEX.get_n_trees() / min(len(args['pos']) + len(args['neg']), ANNOY_INDEX.get_n_trees()))
-        neg = {}
-        for qid in args['neg']:
-            qid_idx = QID_TO_IDX[qid]
-            for rank, idx in enumerate(ANNOY_INDEX.get_nns_by_item(qid_idx, args['k'], search_k=search_k, include_distances=False)):
-                if idx == qid_idx:
-                    continue
-                qid_nei = IDX_TO_QID[idx]
-                if qid_nei not in args['pos'] and qid_nei not in args['skip']:
-                    if qid_nei not in neg:
-                        neg[qid_nei] = []
-                    neg[qid_nei].append(args['k'] - rank)
-        # average inverse rank -- missing ranks then default to 0 which makes sense
-        # more highly ranked items -> larger numbers
-        for qid in neg:
-            neg[qid] = int(sum(neg[qid]) / len(args['neg']))
-
-        pos = {}
-        avg_min_sim = 0
-        for qid in args['pos']:
-            qid_idx = QID_TO_IDX[qid]
-            # I bump args['k'] because in practice I find that the result sets are slightly too small
-            # This is due to filters and the impreciseness of the search trees used by Annoy
-            indices, distances = ANNOY_INDEX.get_nns_by_item(qid_idx, args['k']+10, search_k=search_k, include_distances=True)
-            avg_min_sim += distances[-1]
-            for i, idx in enumerate(indices):
-                qid_nei = IDX_TO_QID[idx]
-                try:
-                    sim = 1 - distances[i + neg.get(qid_nei, 0)]
-                except IndexError:
-                    sim = 1 - distances[-1]
-                if qid_nei not in args['neg'] and qid_nei not in args['skip'] and qid_nei not in args['pos']:
-                    if qid_nei not in pos:
-                        pos[qid_nei] = []
-                    pos[qid_nei].append(sim)
-        avg_min_sim = avg_min_sim / len(args['pos'])
-        for qid in pos:
-            pos[qid] = (sum(pos[qid]) + (avg_min_sim * (len(args['pos']) - len(pos[qid])))) / len(args['pos'])
-
-        results = [{'qid':qid, 'score':score} for qid,score in pos.items() if score >= args['threshold']]
-        results = sorted(results, key=lambda x:x['score'], reverse=True)[:args['k']]
-        add_article_titles(args['lang'], results)
-        return jsonify(results)
-
-def parse_args_interactive():
-    args = parse_args()
-    if 'error' not in args:
-        args['k'] += 1
-        args['pos'] = [args['qid']] + [qid for qid in request.args.get('pos','').upper().split('|') if validate_qid_model(qid)]
-        args['neg'] = [qid for qid in request.args.get('neg', '').upper().split('|') if validate_qid_model(qid)]
-        args['skip'] = [qid for qid in request.args.get('skip', '').upper().split('|') if validate_qid_model(qid)]
-    return args
 
 def parse_args():
     # number of neighbors
@@ -119,8 +77,6 @@ def parse_args():
     qid = request.args.get('qid').upper()
     if not validate_qid_format(qid):
         return {'error': "Error: poorly formatted 'qid' field. {0} does not match 'Q#...'".format(qid)}
-    if not validate_qid_model(qid):
-        return {'error': "Error: {0} is not included in the model".format(qid)}
 
     # threshold for similarity to include
     t_default = 0  # default minimum cosine similarity
@@ -132,7 +88,7 @@ def parse_args():
 
     # target language
     lang = request.args.get('lang', 'en').lower().replace('wiki', '')
-    if lang not in WIKIPEDIA_LANGUAGE_CODES:
+    if lang not in WIKIPEDIA_LANGUAGES:
         lang = 'en'
 
     # pass arguments
@@ -146,9 +102,6 @@ def parse_args():
 
 def validate_qid_format(qid):
     return re.match('^Q[0-9]+$', qid)
-
-def validate_qid_model(qid):
-    return qid in QID_TO_IDX
 
 def add_article_titles(lang, results, n_batch=50):
     wiki = '{0}wiki'.format(lang)
@@ -173,11 +126,71 @@ def add_article_titles(lang, results, n_batch=50):
             qid_idx = qids[qid]
             results[qid_idx]['title'] = sitelinks['entities'].get(qid, {}).get('sitelinks', {}).get(wiki, {}).get('title', '-')
 
+def item_to_embedding(qid):
+    # emb = ' '.join(['{0:.3f}'.format(d) for d in ft_model.get_sentence_vector(outlinks)])
+    lang_to_title = get_wiki_sitelinks(qid)
+    qids = []
+    for lang, page_title in lang_to_title.items():
+        qids.extend(get_outlinks(lang, page_title))
+
+    if qids:
+        return FT_MODEL.get_sentence_vector(' '.join(qids))
+    else:
+        return None
+
+def get_wiki_sitelinks(item):
+    # https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&props=sitelinks&format=json&formatversion=2
+    base_url = 'https://www.wikidata.org/w/api.php'
+    params = {'action': 'wbgetentities',
+              'ids': item,
+              'props': 'sitelinks',
+              'format': 'json',
+              'formatversion': 2}
+    result = requests.get(base_url, params=params).json()
+    # r['entities']['Q42']['sitelinks']['enwiki']['title']
+    sitelinks = {}
+    for site in result.get('entities', {}).get(item, {}).get('sitelinks', []):
+        if site.endswith('wiki'):
+            sitelinks[site.replace('wiki', '')] = result['entities'][item]['sitelinks'][site]['title']
+    return sitelinks
+
+def get_outlinks(lang, title, limit=500):
+    """Gather set of up to `limit` outlinks for an article."""
+    session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
+
+    # generate list of all outlinks (to namespace 0) from the article and their associated Wikidata IDs
+    result = session.get(
+        action="query",
+        generator="links",
+        titles=title,
+        redirects='',
+        prop='pageprops',
+        ppprop='wikibase_item',
+        gplnamespace=0,  # this actually doesn't seem to work :/
+        gpllimit=50,
+        format='json',
+        formatversion=2,
+        continuation=True
+    )
+    outlink_qids = set()
+    try:
+        for r in result:
+            for outlink in r['query']['pages']:
+                if outlink['ns'] == 0 and 'missing' not in outlink:  # namespace 0 and not a red link
+                    qid = outlink.get('pageprops', {}).get('wikibase_item', None)
+                    if qid is not None:
+                        outlink_qids.add(qid)
+            if len(outlink_qids) >= limit:
+                break
+    except Exception:
+        pass
+    return list(outlink_qids)
+
 def load_similarity_index():
     global IDX_TO_QID
     global QID_TO_IDX
-    index_fp = os.path.join(__dir__, 'resources/embeddings.ann')
-    qidmap_fp = os.path.join(__dir__, 'resources/qid_to_idx.pickle')
+    index_fp = os.path.join(EMB_DIR, 'embeddings.ann')
+    qidmap_fp = os.path.join(EMB_DIR, 'qid_to_idx.pickle')
     if os.path.exists(index_fp):
         print("Using pre-built ANNOY index")
         ANNOY_INDEX.load(index_fp)
@@ -186,7 +199,7 @@ def load_similarity_index():
     else:
         print("Builing ANNOY index")
         ANNOY_INDEX.on_disk_build(index_fp)
-        with bz2.open(os.path.join(__dir__, 'resources/embeddings.tsv.bz2'), 'rt') as fin:
+        with bz2.open(os.path.join(EMB_DIR, 'embeddings.tsv.bz2'), 'rt') as fin:
             for idx, line in enumerate(fin, start=0):
                 line = line.strip().split('\t')
                 qid = line[0]
