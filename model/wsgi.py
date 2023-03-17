@@ -375,10 +375,10 @@ def load_data():
     logging.info(f'{len(EXTERNAL_ID_PROPERTIES)} external IDs loaded in.')
     logging.info(f'e.g., {"; ".join(list(EXTERNAL_ID_PROPERTIES)[:5])}; ...')
 
-    QUALITY_MODEL = api.load('/etc/api-endpoint/resources/wikidata-quality-model.pkl').summary()
+    QUALITY_MODEL = api.load('/etc/api-endpoint/resources/wikidata-quality-model.pkl')
     logging.info(f'Quality model:\n{QUALITY_MODEL.summary()}')
 
-    COMPLETENESS_MODEL = api.load('/etc/api-endpoint/resources/wikidata-completeness-model.pkl').summary()
+    COMPLETENESS_MODEL = api.load('/etc/api-endpoint/resources/wikidata-completeness-model.pkl')
     logging.info(f'Completeness model:\n{COMPLETENESS_MODEL.summary()}')
 
 
