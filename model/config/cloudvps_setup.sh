@@ -8,8 +8,11 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 # model binary / data -- ndownloader.figshare is a good host
 # alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
-MODEL_WGET='...'
-GIT_BRANCH='gunicorn'
+GIT_BRANCH='wikidata-quality'
+REF_DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-property-prop-reffed.tsv.gz'
+EXT_ID_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/quarry-69919-wikidata-external-ids-run692643.tsv'
+QUAL_MOD_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-quality-model.pkl'
+COMP_MOD_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-completeness-model.pkl'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -51,10 +54,11 @@ pip install wheel
 pip install gunicorn
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-#echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+echo "Downloading data, hang on..."
+wget -O ${ETC_PATH}/resources/ref_props.tsv.gz ${REF_DATA_WGET}
+wget -O ${ETC_PATH}/resources/external_ids.tsv ${EXT_ID_WGET}
+wget -O ${ETC_PATH}/resources/wikidata-quality-model.pkl ${QUAL_MOD_WGET}
+wget -O ${ETC_PATH}/resources/wikidata-completeness-model.pkl ${COMP_MOD_WGET}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
