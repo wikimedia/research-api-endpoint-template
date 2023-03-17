@@ -1,4 +1,5 @@
 import gzip
+import json
 import logging
 import math
 import os
@@ -41,7 +42,8 @@ def get_item_scores():
     if error is not None:
         return jsonify({'error': error})
     else:
-        label_desc_score, claim_score, ref_score, num_claims = assess_item(qid)
+        item = get_wikidata_item(qid)
+        label_desc_score, claim_score, ref_score, num_claims = assess_item(item)
         completeness = LABELS[COMPLETENESS_MODEL.predict([label_desc_score, claim_score, ref_score]).argmax()]
         quality = LABELS[QUALITY_MODEL.predict([label_desc_score, claim_score, ref_score, num_claims]).argmax()]
         result = {'item': f'https://www.wikidata.org/wiki/{qid}',
@@ -251,6 +253,25 @@ def assess_claims(item):
 
     # print(('existing claims:', num_existing_claims, ';backlog:', claim_backlog, ';refbacklog:', missing_claim_ref_backlog))
     return (num_existing_claims, claim_backlog, missing_claim_ref_backlog)
+
+
+def get_wikidata_item(qid):
+    """Get Wikidata page at time when it was annotated."""
+    # https://www.wikidata.org/w/api.php?action=query&prop=revisions&titles=Q42&rvlimit=1&rvprop=timestamp|content&rvslots=main&format=json&formatversion=2
+    session = mwapi.Session('https://www.wikidata.org', user_agent='isaacj@wikimedia.org; PAWS')
+    params = {'action':'query',
+              'prop':'revisions',
+              'titles':qid,
+              'rvlimit':1,
+              'rvprop':'content',
+              'rvslots':'main',
+              'format':'json',
+              'formatversion':2}
+    result = session.get(**params)
+    try:
+        return json.loads(result['query']['pages'][0]['revisions'][0]['slots']['main']['content'])
+    except Exception:
+        return None
 
 
 def assess_item(item):
