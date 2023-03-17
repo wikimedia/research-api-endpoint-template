@@ -5,7 +5,6 @@ APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
-SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
 LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 
@@ -28,7 +27,6 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${REPO_LBL}/model/config/* ${ETC_PATH}
-# TODO: fix this to be more elegant (one directory or not necessary because run as package)
 cp ${TMP_PATH}/${REPO_LBL}/model/wsgi.py ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/flask_config.yaml ${ETC_PATH}
 cp ${ETC_PATH}/model.nginx /etc/nginx/sites-available/model
