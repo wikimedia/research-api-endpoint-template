@@ -44,11 +44,17 @@ def get_item_scores():
     else:
         item = get_wikidata_item(qid)
         label_desc_score, claim_score, ref_score, num_claims = assess_item(item)
-        completeness = LABELS[COMPLETENESS_MODEL.predict([label_desc_score, claim_score, ref_score]).argmax()]
-        quality = LABELS[QUALITY_MODEL.predict([label_desc_score, claim_score, ref_score, num_claims]).argmax()]
+        completeness = LABELS[COMPLETENESS_MODEL.predict(
+            [label_desc_score, claim_score, ref_score]).argmax()]
+        quality = LABELS[QUALITY_MODEL.predict(
+            [label_desc_score, claim_score, ref_score, math.sqrt(num_claims)]).argmax()]
         result = {'item': f'https://www.wikidata.org/wiki/{qid}',
-                  'quality': quality,
-                  'completeness': completeness
+                  'features': {'label-desc-completeness': label_desc_score,
+                               'claim-completeness': claim_score,
+                               'ref-completeness': ref_score,
+                               'num-claims':num_claims},
+                  'predicted-completeness': completeness,
+                  'predicted-quality': quality
                   }
         logging.debug(result)
         return jsonify(result)
@@ -223,7 +229,7 @@ def assess_claims(item):
 
     else:
         claim_backlog = 0
-        num_existing_claims = 0
+        num_existing_claims = len(instance_ofs)
         missing_claim_ref_backlog = 0
         # weight each instance-of/occupation equally
         # eventually might want to weight by frequency as Recoin does (or order?)
@@ -284,8 +290,8 @@ def assess_item(item):
     # print('label_desc_score:', label_desc_score)
 
     num_claims, claim_backlog, missing_claim_ref_backlog = assess_claims(item)
-    # instance-of will always be in the existing or backlog of claims so
-    # this should never be ZeroDivisionError
+    # Should ever get ZeroDivisionError because either no instance-of (claim_backlog = 1)
+    # or has instance-ofs and then num_claims > 0
     claim_score = num_claims / (num_claims + claim_backlog)
     # print('claim_score:', claim_score)
 
@@ -307,7 +313,7 @@ def assess_item(item):
     ref_score = existing_ref_score * existing_ref_weight
     # print('ref_score:', ref_score)
 
-    return label_desc_score, claim_score, ref_score, math.sqrt(len(item.get('claims')))
+    return label_desc_score, claim_score, ref_score, len(item.get('claims', []))
 
 def get_top_properties(qid):
     """Get top properties for a given instance-of or occupation."""
