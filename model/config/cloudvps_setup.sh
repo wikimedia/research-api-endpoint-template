@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # setup Cloud VPS instance with initial server, libraries, code, model, etc.
+# NOTE: before running this, may have to run `sudo wmcs-prepare-cinder-volume` with `/extrastorage` to attach Cinder volume
+# See: https://wikitech.wikimedia.org/wiki/Help:Adding_Disk_Space_to_Cloud_VPS_instances#Cinder
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
@@ -8,8 +10,8 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 # model binary / data -- ndownloader.figshare is a good host
 # alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
-MODEL_WGET='...'
-GIT_BRANCH='gunicorn'
+DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/citations/enwiki-2023-02-citations.tsv.gz'
+GIT_BRANCH='citation-database'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -17,6 +19,7 @@ SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
 LOG_PATH="/var/log/gunicorn"  # application log data
 LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
+DB_PATH="${ETC_PATH}/resources"  # where the database will sit -- alternative /extrastorage w/ Cinder volume
 
 echo "Updating the system..."
 apt-get update
@@ -35,7 +38,8 @@ rm -rf ${LOG_PATH}
 rm -rf ${LIB_PATH}
 mkdir -p ${TMP_PATH}
 mkdir -p ${SRV_PATH}/sock
-mkdir -p ${ETC_PATH}/resources
+mkdir -p ${ETC_PATH}
+mkdir -p ${DB_PATH}
 mkdir -p ${LOG_PATH}
 mkdir -p ${LIB_PATH}
 
@@ -51,10 +55,10 @@ pip install wheel
 pip install gunicorn
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-#echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+echo "Downloading model and setting up DB, hang on..."
+cd ${TMP_PATH}
+wget -O enwiki-2023-02-citations.tsv.gz ${DATA_WGET}
+python3 ${REPO_LBL}/model/db_setup.py --citation_tsv enwiki-2023-02-citations.tsv.gz
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}

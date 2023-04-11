@@ -1,5 +1,6 @@
 import logging
 import os
+import sqlite3
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -17,7 +18,7 @@ app.config.update(yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml')
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 # fast-text model for making predictions
-EXAMPLE_MODEL = {}
+SQLITE_DB_FN = '/extrastorage/sources.db'
 
 @app.route('/api/v1/example', methods=['GET'])
 def article_starts_with_vowel():
@@ -86,9 +87,16 @@ def load_model():
     A common template is loading a data file or model into memory.
     os.path.join(__dir__, 'filename')) is your friend.
     """
-    for letter in 'aeiou':
-        EXAMPLE_MODEL[letter] = 'vowel'
-    logging.info(f"Model loaded: {EXAMPLE_MODEL}")
+    con = sqlite3.connect(SQLITE_DB_FN)
+    cur = con.cursor()
+
+    cur.execute("CREATE TABLE citations(citation_id int, source_id int, page_title)")
+    cur.execute("CREATE TABLE sources(source_id int, identifier, prefix)")
+    cur.execute("CREATE TABLE articles(identifier, title)")
+    cur.execute("CREATE TABLE works(identifier, work)")
+    cur.execute("CREATE TABLE publishers(identifier, publisher)")
+
+
 
 load_model()
 
