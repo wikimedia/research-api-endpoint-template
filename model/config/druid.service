@@ -3,7 +3,7 @@ Description=Druid Backend service
 After=syslog.target
 
 [Service]
-ExecStart=/var/lib/druid/apache-druid-0.23.0/bin/supervise -c /var/lib/druid/apache-druid-0.23.0/conf/supervise/single-server/micro-quickstart.conf
+ExecStart=/var/lib/druid/apache-druid-25.0.0/bin/supervise -c /var/lib/druid/apache-druid-25.0.0/conf/supervise/single-server/micro-quickstart.conf
 User=www-data
 Group=www-data
 Restart=always

@@ -11,10 +11,10 @@ GIT_BRANCH='turnilo-druid'
 DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/referrals/data.tsv'  # data for Turnilo
 
 # Druid database -- this is downloaded and runs the backend database for the search data and turnilo
-DRUID_APP='https://dlcdn.apache.org/druid/0.23.0/apache-druid-0.23.0-bin.tar.gz'
-DRUID_TARNAME='apache-druid-0.23.0-bin.tar.gz'
-DRUID_EXPECTED_SHASUM='5e7420bdc66247f0309fc0c1eafeff7ba935ed195f3a28c2da4b23a28ff637300b46b1c3d048379ccd570dde164968494ff5d8847e82eaf9b0edb518f8665328'
-DRUID_DIRNAME="apache-druid-0.23.0"
+DRUID_APP='https://dlcdn.apache.org/druid/25.0.0/apache-druid-25.0.0-bin.tar.gz'
+DRUID_TARNAME='apache-druid-25.0.0-bin.tar.gz'
+DRUID_EXPECTED_SHASUM='16f917c1c12c8edf85cefd4ad2fb68bf74cdbbb83e791e15fd13e74af18f3fbfddcdfbae8ab3834dba71cd8d45c6fe3920fbe3c75b0e5d050f040332c8ce54b7'
+DRUID_DIRNAME="apache-druid-25.0.0"
 DRUID_PATH='/var/lib/druid'
 
 # java8 installation -- unfortunately not supported via standard apt-get just yet

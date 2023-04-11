@@ -7,7 +7,7 @@ REPO_LBL='turnilo'  # directory where repo code will go
 DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/referrals/data.tsv'  # data for Turnilo
 
 # Druid database -- this is downloaded and runs the backend database for the search data and turnilo
-DRUID_DIRNAME="apache-druid-0.23.0"
+DRUID_DIRNAME="apache-druid-25.0.0"
 DRUID_PATH='/var/lib/druid'
 
 # derived paths

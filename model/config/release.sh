@@ -10,7 +10,7 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 GIT_BRANCH='turnilo-druid'
 
 # Druid database -- this is downloaded and runs the backend database for the search data and turnilo
-DRUID_DIRNAME="apache-druid-0.23.0"
+DRUID_DIRNAME="apache-druid-25.0.0"
 DRUID_PATH='/var/lib/druid'
 
 # derived paths
