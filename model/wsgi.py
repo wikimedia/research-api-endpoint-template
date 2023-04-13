@@ -124,7 +124,7 @@ def check_citations():
     if not citations:
         return jsonify({'error': f'no citations found matching: {citations_url}'})
     else:
-        _con = sqlite3.connect('/Users/ijohnson/Downloads/sources.db')
+        _con = sqlite3.connect('/extrastorage/sources.db')
         cur = _con.cursor()
         results = {'page': citations_url,
                    'results': []}
@@ -347,6 +347,7 @@ def validate_api_args():
                 page_id = int(request.args['page_id'])
                 page_title = get_canonical_page_titles([page_id], lang).get(page_id)
             except ValueError:
+                traceback.print_exc()
                 page_id = None
         elif page_title:
             page_id = get_canonical_pageid(page_title, lang)
