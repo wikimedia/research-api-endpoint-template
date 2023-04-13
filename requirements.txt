@@ -1,4 +1,9 @@
+beautifulsoup4
 Flask
 Flask-Cors
+isbnlib
 mwapi
+mwconstants
 PyYAML
+requests
+tldextract
