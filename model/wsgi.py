@@ -50,7 +50,7 @@ def check_citation():
         return jsonify({'error': f'no citation found matching: {citation_url}'})
 
     pageids = set()
-    _con = sqlite3.connect('/Users/ijohnson/Downloads/sources.db')
+    _con = sqlite3.connect('/extrastorage/sources.db')
     cur = _con.cursor()
     if title:
         start = time.time()
