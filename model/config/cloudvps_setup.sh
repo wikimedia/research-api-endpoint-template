@@ -10,7 +10,6 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 # model binary / data -- ndownloader.figshare is a good host
 # alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
-DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/citations/enwiki-2023-02-citations.tsv.gz'
 GIT_BRANCH='citation-database'
 
 # derived paths
@@ -55,10 +54,10 @@ pip install wheel
 pip install gunicorn
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-echo "Downloading model and setting up DB, hang on..."
-cd ${TMP_PATH}
-wget -O enwiki-2023-02-citations.tsv.gz ${DATA_WGET}
-python3 ${REPO_LBL}/model/db_setup.py --citation_tsv enwiki-2023-02-citations.tsv.gz
+#echo "Downloading model and setting up DB, hang on..."
+#cd ${TMP_PATH}
+#wget -O enwiki-2023-02-citations.tsv.gz ${DATA_WGET}
+#python3 ${REPO_LBL}/model/db_setup.py --citation_tsv enwiki-2023-02-citations.tsv.gz
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
