@@ -29,83 +29,6 @@ cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 # fast-text model for making predictions
 
-@app.route('/api/check-citation', methods=['GET'])
-def check_citation():
-    """API endpoint. Takes inputs from request URL and returns JSON with outputs.
-
-    Steps:
-    * Input page + citation ID
-    * Grab page Parsoid HTML to extract the correct wikitext parameters
-    * For any extracted parameters (title; URL; DOI; ISBN), do a search on the database
-    * Union pageIDs, remove input pageID, map to titles and return
-    """
-    lang, page_id, page_title, citation_id, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
-    citation_url = f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}#cite_note-{citation_id}'
-    citation = extract_citation(lang, page_title, citation_id)
-    if citation:
-        title, url, doi, isbn = process_citation(citation)
-    else:
-        return jsonify({'error': f'no citation found matching: {citation_url}'})
-
-    pageids = set()
-    _con = sqlite3.connect('/extrastorage/sources.db')
-    cur = _con.cursor()
-    if title:
-        start = time.time()
-        pageids.update(find_matching_pages(cur, 'title', 'title', title))
-        title_time = time.time() - start
-    else:
-        title_time = None
-    if url:
-        start = time.time()
-        pageids.update(find_matching_pages(cur, 'url', 'url', url))
-        url_time = time.time() - start
-    else:
-        url_time = None
-    if doi:
-        start = time.time()
-        pageids.update(find_matching_pages(cur, 'doi', 'doi', doi))
-        doi_time = time.time() - start
-    else:
-        doi_time = None
-    if isbn:
-        start = time.time()
-        pageids.update(find_matching_pages(cur, 'isbn', 'isbn', isbn))
-        isbn_time = time.time() - start
-    else:
-        isbn_time = None
-
-    matching_pages = []
-    if page_id in pageids:  # don't return self
-        pageids.remove(page_id)
-    if pageids:
-        pid_to_title = get_canonical_page_titles(list(pageids), lang)
-        for p in pageids:
-            if p in pid_to_title:
-                matching_pages.append(pid_to_title[p])
-            else:
-                matching_pages.append(f'?curid={p}')
-
-    result = {'citation': citation_url,
-              'extracted-info': {
-                  'title':title,
-                  'url':url,
-                  'doi':doi,
-                  'isbn':isbn
-              },
-              'times': {
-                  'title': title_time,
-                  'url': url_time,
-                  'doi': doi_time,
-                  'isbn': isbn_time,
-              },
-              'matching-pages': matching_pages
-              }
-    logging.debug(result)
-    return jsonify(result)
-
 @app.route('/api/check-citations', methods=['GET'])
 def check_citations():
     """API endpoint. Takes inputs from request URL and returns JSON with outputs.
@@ -119,18 +42,18 @@ def check_citations():
     lang, page_id, page_title, citation_id, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
-    citations_url = f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}'
-    citations = extract_all_citations(lang, page_title)
+    page_url = f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}'
+    citations = extract_citations(lang, page_title, citation_id)
     if not citations:
-        return jsonify({'error': f'no citations found matching: {citations_url}'})
+        return jsonify({'error': f'no citations found matching: {page_url}'})
     else:
         _con = sqlite3.connect('/extrastorage/sources.db')
         cur = _con.cursor()
-        results = {'page': citations_url,
+        results = {'page': page_url,
                    'results': []}
         for citation in citations:
             title, url, doi, isbn = process_citation(citation)
-            citation_url = f'{citations_url}#{citation.attrs.get("id", "")}'
+            citation_url = f'{page_url}#{citation.attrs.get("id", "")}'
             pageids = set()
             if title:
                 start = time.time()
@@ -210,21 +133,14 @@ def get_parsoid_html(lang, page_title):
     result = requests.get(rest_url, headers={'User-Agent': app.config['CUSTOM_UA']})
     return result.text
 
-def extract_citation(lang, page_title, citation_id):
+def extract_citations(lang, page_title, citation_id=None):
     article_html = get_parsoid_html(lang, page_title)
     soup = BeautifulSoup(article_html)
     try:
-        return soup.find('li', id=f'cite_note-{citation_id}')
-    except Exception:
-        traceback.print_exc()
-        pass
-    return None
-
-def extract_all_citations(lang, page_title):
-    article_html = get_parsoid_html(lang, page_title)
-    soup = BeautifulSoup(article_html)
-    try:
-        return soup.find_all('li', id=re.compile('cite_note-'))
+        if citation_id is None:
+            return soup.find_all('li', id=re.compile('cite_note-'))
+        else:
+            return [soup.find('li', id=f'cite_note-{citation_id}')]
     except Exception:
         traceback.print_exc()
         pass
@@ -341,19 +257,21 @@ def validate_api_args():
     lang = request.args.get('lang')
     if lang not in WIKIPEDIA_LANGUAGES:
         lang = 'en'
-    if citation_id:
-        if page_id:
-            try:
-                page_id = int(request.args['page_id'])
-                page_title = get_canonical_page_titles([page_id], lang).get(page_id)
-            except ValueError:
-                traceback.print_exc()
-                page_id = None
-        elif page_title:
-            page_id = get_canonical_pageid(page_title, lang)
+    if page_id:
+        try:
+            page_id = int(request.args['page_id'])
+            page_title = get_canonical_page_titles([page_id], lang).get(page_id)
+        except ValueError:
+            traceback.print_exc()
+            page_id = None
+    elif page_title:
+        page_id = get_canonical_pageid(page_title, lang)
 
-    if citation_id is None or page_id is None or page_title is None:
-        error = 'Need an article such that https://{lang}.wikipedia.org/wiki/?curid={page_id}#cite_note-{citation-id} is valid -- e.g., https://en.wikipedia.org/wiki/?curid=65737018#cite_note-39'
+    if page_id is None or page_title is None:
+        if citation_id:
+            error = 'Need an article such that https://{lang}.wikipedia.org/wiki/?curid={page_id}#cite_note-{citation-id} is valid -- e.g., https://en.wikipedia.org/wiki/?curid=65737018#cite_note-39'
+        else:
+            error = 'Need an article such that https://{lang}.wikipedia.org/wiki/?curid={page_id} is valid -- e.g., https://en.wikipedia.org/wiki/?curid=65737018'
 
     return lang, page_id, page_title, citation_id, error
 
