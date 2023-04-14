@@ -55,10 +55,10 @@ def check_citations():
         url_time = 0
         doi_time = 0
         isbn_time = 0
-        num_matched = 0
         for citation in citations:
             title, url, doi, isbn = process_citation(citation)
             pageids = set()
+            num_matched = 0
             if title:
                 start = time.time()
                 pageids.update(find_matching_pages(cur, 'title', 'title', title))
