@@ -39,7 +39,7 @@ def check_citations():
     * For any extracted parameters (title; URL; DOI; ISBN), do a search on the database
     * Union pageIDs, remove input pageID, map to titles and return
     """
-    lang, page_id, page_title, citation_id, error = validate_api_args()
+    lang, page_id, page_title, citation_id, max_pages, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
     page_url = f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}'
@@ -51,63 +51,62 @@ def check_citations():
         cur = _con.cursor()
         results = {'page': page_url,
                    'results': []}
+        title_time = 0
+        url_time = 0
+        doi_time = 0
+        isbn_time = 0
+        num_matched = 0
         for citation in citations:
             title, url, doi, isbn = process_citation(citation)
-            citation_url = f'{page_url}#{citation.attrs.get("id", "")}'
             pageids = set()
             if title:
                 start = time.time()
                 pageids.update(find_matching_pages(cur, 'title', 'title', title))
-                title_time = time.time() - start
-            else:
-                title_time = None
+                title_time += time.time() - start
             if url:
                 start = time.time()
                 pageids.update(find_matching_pages(cur, 'url', 'url', url))
-                url_time = time.time() - start
-            else:
-                url_time = None
+                url_time += time.time() - start
             if doi:
                 start = time.time()
                 pageids.update(find_matching_pages(cur, 'doi', 'doi', doi))
-                doi_time = time.time() - start
-            else:
-                doi_time = None
+                doi_time += time.time() - start
             if isbn:
                 start = time.time()
                 pageids.update(find_matching_pages(cur, 'isbn', 'isbn', isbn))
-                isbn_time = time.time() - start
-            else:
-                isbn_time = None
+                isbn_time += time.time() - start
 
             matching_pages = []
             if page_id in pageids:  # don't return self
                 pageids.remove(page_id)
             if pageids:
-                pid_to_title = get_canonical_page_titles(list(pageids), lang)
+                num_matched = len(pageids)
+                pageids = list(pageids)
+                if max_pages:
+                    pageids = pageids[:max_pages]
+                pid_to_title = get_canonical_page_titles(pageids, lang)
                 for p in pageids:
                     if p in pid_to_title:
                         matching_pages.append(pid_to_title[p])
                     else:
                         matching_pages.append(f'?curid={p}')
 
-            result = {'citation': citation_url,
+            result = {'citation-id': citation.attrs.get("id", ""),
                       'extracted-info': {
                           'title':title,
                           'url':url,
                           'doi':doi,
                           'isbn':isbn
                       },
-                      'times': {
-                          'title': title_time,
-                          'url': url_time,
-                          'doi': doi_time,
-                          'isbn': isbn_time,
-                      },
-                      'matching-pages': matching_pages
+                      'matching-pages': sorted(matching_pages),
+                      'total-matches': num_matched,
                       }
             results['results'].append(result)
 
+    results['overall-latency'] = {'title': title_time or None,
+                                  'url': url_time or None,
+                                  'doi': doi_time or None,
+                                  'isbn': isbn_time or None}
     return jsonify(results)
 
 def find_matching_pages(cur, tablename, fieldname, value):
@@ -251,6 +250,10 @@ def validate_api_args():
     """Validate API arguments for language-agnostic model.
     """
     error = None
+    try:
+        max_pages = max(1, int(request.args.get('max_pages')))
+    except Exception:
+        max_pages = 0
     page_id = request.args.get('page_id')
     page_title = request.args.get('page_title')
     citation_id = request.args.get('citation_id')
@@ -273,7 +276,7 @@ def validate_api_args():
         else:
             error = 'Need an article such that https://{lang}.wikipedia.org/wiki/?curid={page_id} is valid -- e.g., https://en.wikipedia.org/wiki/?curid=65737018'
 
-    return lang, page_id, page_title, citation_id, error
+    return lang, page_id, page_title, citation_id, max_pages, error
 
 if __name__ == '__main__':
     app.run()
