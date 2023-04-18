@@ -8,6 +8,7 @@ import traceback
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
+from doi import find_doi_in_text
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import isbnlib
@@ -39,6 +40,7 @@ def check_citations():
     * For any extracted parameters (title; URL; DOI; ISBN), do a search on the database
     * Union pageIDs, remove input pageID, map to titles and return
     """
+    start = time.time()
     lang, page_id, page_title, citation_id, max_pages, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
@@ -55,8 +57,15 @@ def check_citations():
         url_time = 0
         doi_time = 0
         isbn_time = 0
-        for citation in citations:
-            title, url, doi, isbn = process_citation(citation)
+        param_time = 0
+        package_time = 0
+        all_pages = set()
+        citation_extraction_time = time.time() - start
+        for citation_id, (citation_wikitext, citation_html) in citations:
+            start = time.time()
+            title, url, doi, isbn = process_citation_wikitext(citation_wikitext)
+            title, url, doi, isbn = process_citation_html(citation_html, title, url, doi, isbn)
+            param_time += time.time() - start
             pageids = set()
             num_matched = 0
             if title:
@@ -76,38 +85,47 @@ def check_citations():
                 pageids.update(find_matching_pages(cur, 'isbn', 'isbn', isbn))
                 isbn_time += time.time() - start
 
-            matching_pages = []
+            start = time.time()
             if page_id in pageids:  # don't return self
                 pageids.remove(page_id)
+            pageids = list(pageids)
             if pageids:
                 num_matched = len(pageids)
-                pageids = list(pageids)
                 if max_pages:
                     pageids = pageids[:max_pages]
-                pid_to_title = get_canonical_page_titles(pageids, lang)
-                for p in pageids:
-                    if p in pid_to_title:
-                        matching_pages.append(pid_to_title[p])
-                    else:
-                        matching_pages.append(f'?curid={p}')
+                all_pages.update(pageids)
 
-            result = {'citation-id': citation.attrs.get("id", ""),
+            result = {'citation-id': citation_id,
+                      'matching-pages': pageids,
+                      'total-matches': num_matched,
                       'extracted-info': {
                           'title':title,
                           'url':url,
                           'doi':doi,
                           'isbn':isbn
                       },
-                      'matching-pages': sorted(matching_pages),
-                      'total-matches': num_matched,
+                      #'citation_node': str(citation_html),
+                      #'wikitext': citation_wikitext
                       }
             results['results'].append(result)
+            package_time += time.time() - start
 
-    results['overall-latency'] = {'title': title_time or None,
-                                  'url': url_time or None,
-                                  'doi': doi_time or None,
-                                  'isbn': isbn_time or None}
-    return jsonify(results)
+        start = time.time()
+        pid_to_title = get_canonical_page_titles(list(all_pages), lang)
+        for cidx in range(0, len(results['results'])):
+            for pidx in range(0, len(results['results'][cidx]['matching-pages'])):
+                pageid = results['results'][cidx]['matching-pages'][pidx]
+                results['results'][cidx]['matching-pages'][pidx] = pid_to_title.get(pageid, f'?curid={pageid}')
+        package_time += time.time() - start
+
+        results['overall-latency'] = {'citation_extraction':citation_extraction_time,
+                                      'param_extraction':param_time,
+                                      'packaging':package_time,
+                                      'title': title_time or None,
+                                      'url': url_time or None,
+                                      'doi': doi_time or None,
+                                      'isbn': isbn_time or None}
+        return jsonify(results)
 
 def find_matching_pages(cur, tablename, fieldname, value):
     query = f"""
@@ -137,65 +155,136 @@ def extract_citations(lang, page_title, citation_id=None):
     soup = BeautifulSoup(article_html)
     try:
         if citation_id is None:
-            return soup.find_all('li', id=re.compile('cite_note-'))
+            cite_notes = soup.find_all('li', id=re.compile('cite_note-'))
+            citations = []
+            for c in cite_notes:
+                citation = find_citation(c, soup)
+                if citation:
+                    citation_id = c.attrs['id'][10:]
+                    citations.append((citation_id, citation))
+            return citations
         else:
-            return [soup.find('li', id=f'cite_note-{citation_id}')]
+            return [(citation_id, find_citation(soup.find('li', id=f'cite_note-{citation_id}'), soup))]
     except Exception:
         traceback.print_exc()
         pass
     return []
 
-def process_citation(citation):
+def find_citation(cite_note, soup):
+    # Situations:
+    # * No ref tag + no cite tag: can't help
+    # * Ref tag + no cite tag: no cite HTML but still cite note; no wikitext
+    # ...
+    # * Ref tag + cite tag: cite HTML and cite wikitext
+    citation_wikitext = None
+    for potential_template in cite_note.findAll(attrs={'data-mw': True}):
+        try:
+            templates = json.loads(potential_template.attrs['data-mw'])
+            for temp in templates['parts']:
+                template_name = temp['template']['target']['wt'].lower().strip()
+                if template_name.startswith('cite') or template_name.startswith('citation'):
+                    citation_wikitext = temp
+                    break
+        except Exception:
+            continue
+
+    cite_html = cite_note
+    if cite_note.cite:
+        cite_html = cite_note.cite
+    else:
+        ref_text = cite_note.find(class_='mw-reference-text')
+        if ref_text:
+            for l in ref_text.findAll('a', attrs={'rel':'mw:WikiLink'}):
+                link_parts = l.attrs.get('href', '').rsplit('#', maxsplit=1)
+                if len(link_parts) == 2:
+                    possible_cite_note = soup.find('cite', id=link_parts[1])
+                    if possible_cite_note:
+                        cite_html = possible_cite_note
+                        break
+
+    return (citation_wikitext, cite_html)
+    # TODO: clause for when cite template not being used (so no cite tag)?
+    # e.g., https://en.wikipedia.org/wiki/Roch_Th%C3%A9riault#cite_note-2
+
+def process_citation_html(citation, title=None, url=None, doi=None, isbn=None):
+    # first check if DOI -- if so, keep and continue on
+    # only keep title if 1st external link -- otherwise probably JSTOR or archived link or other identifiers etc.
+    # keep first non-DOI as URL
+    for i, external_link in enumerate(citation.findAll('a', attrs={'rel':'mw:ExtLink'})):
+        href = external_link.attrs.get('href')
+        if href:
+            if not doi:
+                potential_doi = find_doi_in_text(href)
+                if potential_doi:
+                    doi = potential_doi
+                    continue
+            if i == 0 and not title and 'autonumber' not in external_link.attrs.get('class', []):
+                title = external_link.get_text().strip().lower()
+            if not url:
+                url = href
+                tld = tldextract.extract(url)
+                if tld.domain == 'archive':
+                    path = urlparse(url).path
+                    start_of_archived_url = path.find('http')
+                    if start_of_archived_url != -1:
+                        url = str(path[start_of_archived_url:])
+
+    if not isbn:
+        for internal_link in citation.findAll('a', attrs={'rel':'mw:WikiLink'}):
+            href = internal_link.attrs.get('href')
+            if href.startswith('./Special:BookSources'):
+                isbn13 = isbnlib.to_isbn13(href.split('/')[-1])
+                if isbn13:
+                    isbn = isbn13
+                    break
+
+    if not title:
+        potential_title = citation.i
+        if potential_title:
+            title = potential_title.get_text().strip('" ').lower()
+
+    return title, url, doi, isbn
+
+def process_citation_wikitext(citation):
     title = None
     url = None
     doi = None
     isbn = None
-    wikitext = citation.find('link', attrs={'data-mw': True})
-    if wikitext:
-        try:
-            templates = json.loads(wikitext.attrs['data-mw'])
-            for temp in templates['parts']:
-                for param in temp['template']['params']:
-                    param_name = param.strip().lower()
-                    param_val = temp['template']['params'][param]['wt'].strip().lower()
-                    if param_name == 'title':
-                        title = param_val
-                    elif param_name == 'trans-title' and not title:
-                        title = param_val
-                    elif param_name == 'script-title' and not title:
-                        try:
-                            title = param_val.split(':', maxsplit=1)[1]
-                        except IndexError:
-                            traceback.print_exc()
-                            continue
-                    elif param_name == 'isbn':
-                        isbn13 = isbnlib.to_isbn13(param_val)
-                        if isbn13:
-                            isbn = isbn13
-                    # https://www.crossref.org/blog/dois-and-matching-regular-expressions/
-                    elif param_name == 'doi':
-                        try:
-                            doi = re.search('10.\d{4,9}\/[-._;()\/:a-zA-Z0-9]+', param_val).group()
-                        except Exception:
-                            traceback.print_exc()
-                            pass
-                    elif param_name == 'url':
-                        url = param_val
-        except Exception:
-            traceback.print_exc()
-            pass
+    if citation:
+        for param in citation['template']['params']:
+            param_name = param.strip().lower()
+            param_val = citation['template']['params'][param]['wt'].strip().lower()
+            if param_name == 'title':
+                title = param_val
+            elif param_name == 'trans-title' and not title:
+                title = param_val
+            elif param_name == 'script-title' and not title:
+                try:
+                    title = param_val.split(':', maxsplit=1)[1]
+                except IndexError:
+                    traceback.print_exc()
+                    continue
+            elif param_name == 'isbn':
+                isbn13 = isbnlib.to_isbn13(param_val)
+                if isbn13:
+                    isbn = isbn13
+            # https://www.crossref.org/blog/dois-and-matching-regular-expressions/
+            elif param_name == 'doi':
+                try:
+                    doi = re.search('10.\d{4,9}\/[-._;()\/:a-zA-Z0-9]+', param_val).group()
+                except Exception:
+                    traceback.print_exc()
+                    pass
+            elif param_name == 'url':
+                url = param_val
 
-    if url is None:
-        extlink_node = citation.find('a', attrs={"rel": re.compile("mw:ExtLink")})
-        if extlink_node:
-            url = extlink_node.attrs.get('href')
-    if url is not None:
-        tld = tldextract.extract(url)
-        if tld.domain == 'archive':
-            path = urlparse(url).path
-            start_of_archived_url = path.find('http')
-            if start_of_archived_url != -1:
-                url = str(path[start_of_archived_url:])
+        if url is not None:
+            tld = tldextract.extract(url)
+            if tld.domain == 'archive':
+                path = urlparse(url).path
+                start_of_archived_url = path.find('http')
+                if start_of_archived_url != -1:
+                    url = str(path[start_of_archived_url:])
 
     return title, url, doi, isbn
 

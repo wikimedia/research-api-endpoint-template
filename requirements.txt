@@ -4,6 +4,7 @@ Flask-Cors
 isbnlib
 mwapi
 mwconstants
+python-doi
 PyYAML
 requests
 tldextract
