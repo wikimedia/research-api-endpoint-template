@@ -88,8 +88,8 @@ def check_citations():
             start = time.time()
             if page_id in pageids:  # don't return self
                 pageids.remove(page_id)
-            pageids = list(pageids)
             if pageids:
+                pageids = list(pageids)
                 num_matched = len(pageids)
                 if max_pages:
                     pageids = pageids[:max_pages]
@@ -110,13 +110,14 @@ def check_citations():
             results['results'].append(result)
             package_time += time.time() - start
 
-        start = time.time()
-        pid_to_title = get_canonical_page_titles(list(all_pages), lang)
-        for cidx in range(0, len(results['results'])):
-            for pidx in range(0, len(results['results'][cidx]['matching-pages'])):
-                pageid = results['results'][cidx]['matching-pages'][pidx]
-                results['results'][cidx]['matching-pages'][pidx] = pid_to_title.get(pageid, f'?curid={pageid}')
-        package_time += time.time() - start
+        if len(all_pages) < 1000:
+            start = time.time()
+            pid_to_title = get_canonical_page_titles(list(all_pages), lang)
+            for cidx in range(0, len(results['results'])):
+                for pidx in range(0, len(results['results'][cidx]['matching-pages'])):
+                    pageid = results['results'][cidx]['matching-pages'][pidx]
+                    results['results'][cidx]['matching-pages'][pidx] = pid_to_title.get(pageid, f'?curid={pageid}')
+            package_time += time.time() - start
 
         results['overall-latency'] = {'citation_extraction':citation_extraction_time,
                                       'param_extraction':param_time,
