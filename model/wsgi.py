@@ -88,8 +88,8 @@ def check_citations():
             start = time.time()
             if page_id in pageids:  # don't return self
                 pageids.remove(page_id)
+            pageids = list(pageids)
             if pageids:
-                pageids = list(pageids)
                 num_matched = len(pageids)
                 if max_pages:
                     pageids = pageids[:max_pages]
