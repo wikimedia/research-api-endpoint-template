@@ -28,18 +28,55 @@ app.config.update(yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml')
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-# fast-text model for making predictions
+SQLITE_DB = '/extrastorage/sources.db'
+
+@app.route('/api/check-source', methods=['GET'])
+def check_source():
+    """Find Wikipedia pages (if any) using a given source identifier."""
+    lang = request.args.get('lang')
+    if lang not in WIKIPEDIA_LANGUAGES:
+        lang = 'en'
+    try:
+        max_pages = int(request.args.get('max_pages'))
+    except Exception:
+        max_pages = -1
+    source_type = request.args.get('type', '').lower()
+    valid_source_types = ('url', 'doi', 'isbn', 'title')
+    if source_type not in valid_source_types:
+        return jsonify({'error': f'`type` parameter must be one of {valid_source_types}.'})
+    source_val = request.args.get('source', '')
+    if not source_val:
+        return jsonify({'error': f'`source` parameter must be provided -- e.g., a URL if type=url; a DOI if type=doi; etc.'})
+    elif source_type == 'url':
+        source_val = source_val.strip().lower()
+    elif source_type == 'doi':
+        source_val = source_val.strip().lower()
+    elif source_type == 'isbn':
+        source_val = isbnlib.to_isbn13(source_val)
+    elif source_type == 'title':
+        source_val = source_val.strip().lower()
+
+    _con = sqlite3.connect(SQLITE_DB)
+    cur = _con.cursor()
+    matching_pages = find_matching_pages(cur, source_type, source_type, source_val)
+    num_matching = len(matching_pages)
+    if max_pages >= 0:
+        matching_pages = matching_pages[:max_pages]
+    if len(matching_pages) < 1000:
+        pid_to_title = get_canonical_page_titles(matching_pages, lang)
+        for pidx in range(0, len(matching_pages)):
+            pageid = matching_pages[pidx]
+            if pageid in pid_to_title:
+                matching_pages[pidx] = f'https://{lang}.wikipedia.org/wiki/{pid_to_title[pageid].replace(" ", "_")}'
+            else:
+                matching_pages[pidx] = f'https://{lang}.wikipedia.org/wiki/?curid={pageid}'
+    return jsonify({source_type: source_val,
+                    'total-matches': num_matching,
+                    'matching-pages': sorted(matching_pages)})
 
 @app.route('/api/check-citations', methods=['GET'])
 def check_citations():
-    """API endpoint. Takes inputs from request URL and returns JSON with outputs.
-
-    Steps:
-    * Input page + citation ID
-    * Grab page Parsoid HTML to extract the correct wikitext parameters
-    * For any extracted parameters (title; URL; DOI; ISBN), do a search on the database
-    * Union pageIDs, remove input pageID, map to titles and return
-    """
+    """Find where else a given article's citation(s) are used on Wikipedia."""
     start = time.time()
     lang, page_id, page_title, citation_id, max_pages, error = validate_api_args()
     if error is not None:
@@ -49,7 +86,7 @@ def check_citations():
     if not citations:
         return jsonify({'error': f'no citations found matching: {page_url}'})
     else:
-        _con = sqlite3.connect('/extrastorage/sources.db')
+        _con = sqlite3.connect(SQLITE_DB)
         cur = _con.cursor()
         results = {'page': page_url,
                    'results': []}
@@ -217,12 +254,12 @@ def process_citation_html(citation, title=None, url=None, doi=None, isbn=None):
             if not doi:
                 potential_doi = find_doi_in_text(href)
                 if potential_doi:
-                    doi = potential_doi
+                    doi = potential_doi.lower()
                     continue
             if i == 0 and not title and 'autonumber' not in external_link.attrs.get('class', []):
                 title = external_link.get_text().strip().lower()
             if not url:
-                url = href
+                url = href.lower()
                 tld = tldextract.extract(url)
                 if tld.domain == 'archive':
                     path = urlparse(url).path
@@ -291,10 +328,7 @@ def process_citation_wikitext(citation):
 
 
 def get_canonical_page_titles(pageids, lang):
-    """Resolve redirects / normalization -- used to verify that an input page_title exists.
-
-    Make pageID? or switch to 50 pageids -> page titles
-    """
+    """Map pageIDs to more human-readable page titles."""
     session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
 
     pid_to_title = {}
@@ -316,10 +350,7 @@ def get_canonical_page_titles(pageids, lang):
     return pid_to_title
 
 def get_canonical_pageid(title, lang):
-    """Resolve redirects / normalization -- used to verify that an input page_title exists.
-
-    Make pageID? or switch to 50 pageids -> page titles
-    """
+    """Get pageID for title for filtering out of results list."""
     session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
 
     result = session.get(
@@ -337,8 +368,7 @@ def get_canonical_pageid(title, lang):
         return result['query']['pages'][0]['pageid']
 
 def validate_api_args():
-    """Validate API arguments for language-agnostic model.
-    """
+    """Validate and augment API arguments."""
     error = None
     try:
         max_pages = max(1, int(request.args.get('max_pages')))
