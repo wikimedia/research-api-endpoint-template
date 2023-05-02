@@ -13,7 +13,7 @@ from flask_cors import CORS
 from mwedittypes.utils import wikitext_to_plaintext
 import mwparserfromhell
 import requests
-from sentence_transformers import SentenceTransformer
+#from sentence_transformers import SentenceTransformer
 #from transformers import pipeline
 import yaml
 
@@ -29,7 +29,7 @@ app.config.update(
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 emb_model_name = 'sentence-transformers/all-mpnet-base-v2'
-EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
+EMB_MODEL = None  #SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
 ANNOY_INDEX = AnnoyIndex(768, 'angular')
 IDX_TO_SECTION = []
 
@@ -49,7 +49,7 @@ def search_wikitext():
     if not query:
         return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
     else:
-        inputs = get_inputs(query, result_depth=3)
+        inputs = None  #get_inputs(query, result_depth=3)
         answer = None  #get_answer(query, [i['text'] for i in inputs])
         result = {'query': query, 'search-results':inputs, 'answer':answer}
         return jsonify(result)
