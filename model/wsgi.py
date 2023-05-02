@@ -29,7 +29,7 @@ cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
 emb_model_name = 'sentence-transformers/all-mpnet-base-v2'
 EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
-ANNOY_INDEX = AnnoyIndex(50, 'angular')
+ANNOY_INDEX = AnnoyIndex(768, 'angular')
 IDX_TO_SECTION = []
 
 qa_model_name = "deepset/tinyroberta-squad2"
