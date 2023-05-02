@@ -7,25 +7,12 @@ GIT_BRANCH='wikitech-search'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
-LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 
 # clean up old versions
 rm -rf ${TMP_PATH}
 mkdir -p ${TMP_PATH}
 
 git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
-
-# reinstall virtualenv
-rm -rf ${LIB_PATH}/p3env
-echo "Setting up virtualenv..."
-python3 -m venv ${LIB_PATH}/p3env
-source ${LIB_PATH}/p3env/bin/activate
-
-echo "Installing repositories..."
-pip install wheel
-pip install gunicorn[gevent]
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."

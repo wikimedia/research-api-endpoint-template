@@ -7,4 +7,3 @@ requests
 PyYAML
 sentence-transformers
 transformers
-uWSGI

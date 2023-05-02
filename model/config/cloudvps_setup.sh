@@ -3,7 +3,6 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='wikitech-search'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='wikitech-search'
 ANNOY_EMB_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/embeddings.ann'
@@ -25,9 +24,6 @@ apt-get install -y python3-pip  # install dependencies
 apt-get install -y python3-wheel  # make sure dependencies install correctly even when missing wheels
 apt-get install -y python3-venv  # for building virtualenv
 apt-get install -y python3-dev  # necessary for fasttext
-apt-get install -y uwsgi
-apt-get install -y uwsgi-plugin-python3
-# potentially add: apt-get install -y git python3 libpython3.7 python3-setuptools
 
 echo "Setting up paths..."
 rm -rf ${TMP_PATH}
@@ -46,12 +42,13 @@ python3 -m venv ${LIB_PATH}/p3env
 source ${LIB_PATH}/p3env/bin/activate
 
 echo "Cloning repositories..."
-git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
 
 echo "Installing repositories..."
 pip install wheel
+pip install gunicorn[gevent]
 pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
+pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 echo "Downloading index files..."
 wget -O ${ETC_PATH}/${ANNOY_EMB_FN} ${ANNOY_EMB_URL}
@@ -64,15 +61,15 @@ chown -R www-data:www-data ${LOG_PATH}
 chown -R www-data:www-data ${LIB_PATH}
 
 echo "Copying configuration files..."
-cp ${TMP_PATH}/${REPO_LBL}/model/config/* ${ETC_PATH}
-cp ${TMP_PATH}/${REPO_LBL}/model/wsgi.py ${ETC_PATH}
-cp ${TMP_PATH}/${REPO_LBL}/model/flask_config.yaml ${ETC_PATH}
-cp ${ETC_PATH}/model.nginx /etc/nginx/sites-available/model
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/gunicorn.conf.py ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/wsgi.py ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/flask_config.yaml ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model
 fi
 ln -s /etc/nginx/sites-available/model /etc/nginx/sites-enabled/
-cp ${ETC_PATH}/model.service /etc/systemd/system/
 
 echo "Enabling and starting services..."
 systemctl enable model.service  # uwsgi starts when server starts up

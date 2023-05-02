@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 
@@ -150,9 +151,12 @@ def test():
     result = {'query': query, 'search-results': inputs, 'answer': answer, 'models': MODEL_INFO}
     print(result)
 
-application = app
 load_similarity_index()
 test()
 
 if __name__ == '__main__':
-    application.run()
+    app.run()
+else:
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)

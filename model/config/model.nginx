@@ -8,7 +8,7 @@ server {
     access_log /var/log/nginx/access.log private;
 
     location / {
-        include uwsgi_params;  # tell nginx to set up simple defaults: https://uwsgi-docs.readthedocs.io/en/latest/Nginx.html
-        uwsgi_pass unix:/srv/api-endpoint/sock/model.sock;  # local socket used by nginx to talk to uwsgi
+        include proxy_params;  # tell nginx to set up simple defaults
+        proxy_pass http://unix:/srv/api-endpoint/sock/model.sock;  # local socket used by nginx to talk to gunicorn
     }
 }
