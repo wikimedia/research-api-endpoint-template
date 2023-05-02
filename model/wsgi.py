@@ -14,7 +14,7 @@ from mwedittypes.utils import wikitext_to_plaintext
 import mwparserfromhell
 import requests
 from sentence_transformers import SentenceTransformer
-from transformers import pipeline
+#from transformers import pipeline
 import yaml
 
 app = Flask(__name__)
@@ -33,8 +33,8 @@ EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
 ANNOY_INDEX = AnnoyIndex(768, 'angular')
 IDX_TO_SECTION = []
 
-qa_model_name = "deepset/tinyroberta-squad2"
-QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
+qa_model_name = ''  #"deepset/tinyroberta-squad2"
+QA_MODEL = None  # pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
 
 MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
 
@@ -50,7 +50,7 @@ def search_wikitext():
         return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
     else:
         inputs = get_inputs(query, result_depth=3)
-        answer = get_answer(query, [i['text'] for i in inputs])
+        answer = None  #get_answer(query, [i['text'] for i in inputs])
         result = {'query': query, 'search-results':inputs, 'answer':answer}
         return jsonify(result)
 

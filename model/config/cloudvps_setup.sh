@@ -13,7 +13,7 @@ ANNOY_IDX_FN='section_to_idx.pickle'
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
-LOG_PATH="/var/log/uwsgi"  # application log data
+LOG_PATH="/var/log/gunicorn"  # application log data
 LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 
 echo "Updating the system..."

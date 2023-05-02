@@ -31,7 +31,7 @@ worker_class = 'gevent'
 # https://docs.gunicorn.org/en/stable/settings.html#timeout
 # Also applies to how long the API has to start-up so might have
 # to increase this if API takes a while to start-up -- e.g., loading in model weights
-timeout = 30
+timeout = 60
 
 # Load application code before the worker processes are forked
 # This means that imports and code run on start-up -- e.g., loading models -- are shared between processes
