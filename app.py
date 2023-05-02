@@ -14,7 +14,6 @@ from mwedittypes.utils import wikitext_to_plaintext
 import mwparserfromhell
 import requests
 from sentence_transformers import SentenceTransformer
-from transformers import pipeline
 import yaml
 
 app = Flask(__name__)
@@ -31,10 +30,7 @@ EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
 ANNOY_INDEX = AnnoyIndex(768, 'angular')
 IDX_TO_SECTION = []
 
-qa_model_name = "deepset/tinyroberta-squad2"
-QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
-
-MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
+MODEL_INFO = {'emb':emb_model_name}
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
@@ -48,8 +44,7 @@ def search_wikitext():
         return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
     else:
         inputs = get_inputs(query, result_depth=3)
-        answer = get_answer(query, [i['text'] for i in inputs])
-        result = {'query': query, 'search-results':inputs, 'answer':answer}
+        result = {'query': query, 'search-results':inputs}
         return jsonify(result)
 
 
@@ -98,19 +93,6 @@ def get_section_plaintext(title, wikitext):
         return wikitext_to_plaintext(mwparserfromhell.parse(wikitext).get_sections(flat=True)[0])
 
 
-def get_answer(query, context):
-    """Run Q&A model to extract best answer to query."""
-    qa_input = {
-        'question': query,
-        'context': '\n'.join(context)  # maybe reverse inputs?
-    }
-    try:
-        res = QA_MODEL(qa_input)
-        return res['answer']
-    except Exception:
-        return None
-
-
 def get_inputs(query, result_depth=3):
     """Build inputs to Q&A model for query."""
     embedding = EMB_MODEL.encode(query)
@@ -145,8 +127,7 @@ def test():
     print('getting inputs.')
     inputs = get_inputs(query, result_depth=3)
     print('getting answer.')
-    answer = get_answer(query, [i['text'] for i in inputs])
-    result = {'query': query, 'search-results': inputs, 'answer': answer, 'models': MODEL_INFO}
+    result = {'query': query, 'search-results': inputs, 'models': MODEL_INFO}
     print(result)
 
 load_similarity_index()
