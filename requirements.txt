@@ -4,7 +4,6 @@ Flask-Cors
 mwedittypes
 mwparserfromhell
 requests
-torch
 PyYAML
 sentence-transformers
 transformers

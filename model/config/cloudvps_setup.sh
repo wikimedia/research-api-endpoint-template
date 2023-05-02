@@ -50,6 +50,7 @@ git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 echo "Downloading index files..."

@@ -2,7 +2,7 @@
 # update API endpoint with new model, code, etc.
 
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='topicmodel'  # directory where repo code will go
+REPO_LBL='wikitech-search'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='wikitech-search'
 
@@ -24,6 +24,7 @@ source ${LIB_PATH}/p3env/bin/activate
 
 echo "Installing repositories..."
 pip install wheel
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
