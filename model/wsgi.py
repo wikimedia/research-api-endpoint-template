@@ -35,11 +35,11 @@ IDX_TO_SECTION = []
 qa_model_name = "deepset/tinyroberta-squad2"
 QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
 
-MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}}
+MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
-    return jsonify({'models': MODEL_INFO)
+    return jsonify({'models': MODEL_INFO})
 
 @app.route('/api/wikitech-search', methods=['GET'])
 def search_wikitext():
