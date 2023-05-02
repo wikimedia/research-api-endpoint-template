@@ -1,6 +1,11 @@
 import os
 import pickle
 
+# where nearest neighbor index and models will go
+# must be set before library imports
+EMB_DIR = '/srv/api-endpoint'
+os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
+
 from annoy import AnnoyIndex
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -21,10 +26,6 @@ app.config.update(
 
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
-
-# fast-text model for making predictions
-EMB_DIR = '/srv/api-endpoint'
-os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
 
 emb_model_name = 'sentence-transformers/all-mpnet-base-v2'
 EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
