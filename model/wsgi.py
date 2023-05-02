@@ -145,9 +145,9 @@ def load_similarity_index():
 def test():
     query = 'what is toolforge?'
     print('getting inputs.')
-    inputs = get_inputs(query, result_depth=3)
+    inputs = None  #get_inputs(query, result_depth=3)
     print('getting answer.')
-    answer = get_answer(query, [i['text'] for i in inputs])
+    answer = None  #get_answer(query, [i['text'] for i in inputs])
     result = {'query': query, 'search-results': inputs, 'answer': answer, 'models': MODEL_INFO}
     print(result)
 
