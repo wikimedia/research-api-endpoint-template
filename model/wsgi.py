@@ -38,9 +38,10 @@ QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_mode
 MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
 
 @app.route('/api/wikitech-search', methods=['GET'])
-def search_wikitext():
+def search_wikitext(query=None):
     """Natural language search of technical documentation."""
-    query = request.args.get('query')
+    if query is None:
+        query = request.args.get('query')
     if not query:
         return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
     else:
@@ -137,8 +138,12 @@ def load_similarity_index():
         IDX_TO_SECTION = pickle.load(fin)
     print(f"{len(IDX_TO_SECTION)} passages in nearest neighbor index.")
 
+def test():
+    search_wikitext(query='What is toolforge?')
+
 application = app
 load_similarity_index()
+test()
 
 if __name__ == '__main__':
     application.run()
