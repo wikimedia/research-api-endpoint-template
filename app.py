@@ -1,10 +1,10 @@
-import logging
 import os
 import pickle
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-EMB_DIR = '/etc/api-endpoint'
+__dir__ = os.path.dirname(__file__)
+EMB_DIR = __dir__
 os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
 
 from annoy import AnnoyIndex
@@ -15,14 +15,9 @@ import mwparserfromhell
 import requests
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
-import torch
 import yaml
 
-torch.set_num_threads(1)
-
 app = Flask(__name__)
-
-__dir__ = os.path.dirname(__file__)
 
 # load in app user-agent or any other app config
 app.config.update(
@@ -156,10 +151,3 @@ def test():
 
 load_similarity_index()
 test()
-
-if __name__ == '__main__':
-    app.run()
-else:
-    gunicorn_logger = logging.getLogger('gunicorn.error')
-    app.logger.handlers = gunicorn_logger.handlers
-    app.logger.setLevel(gunicorn_logger.level)
