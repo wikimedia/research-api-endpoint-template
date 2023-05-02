@@ -4,6 +4,8 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
+GIT_BRANCH='wikitech-search'
+
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
 LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
@@ -12,7 +14,7 @@ LIB_PATH="/var/lib/${APP_LBL}"  # where virtualenv will sit
 rm -rf ${TMP_PATH}
 mkdir -p ${TMP_PATH}
 
-git clone --branch content-similarity ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 # reinstall virtualenv
 rm -rf ${LIB_PATH}/p3env

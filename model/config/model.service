@@ -1,5 +1,5 @@
 [Unit]
-Description=Research API service
+Description=Search API service
 After=syslog.target
 
 [Service]

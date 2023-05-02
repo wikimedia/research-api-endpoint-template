@@ -1,9 +1,11 @@
 annoy
-fasttext
 Flask
 Flask-Cors
-mwapi
-mwconstants
+mwedittypes
+mwparserfromhell
 requests
+pytorch
 PyYAML
+sentence-transformers
+transformers
 uWSGI

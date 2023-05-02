@@ -3,8 +3,13 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='topicmodel'  # directory where repo code will go
+REPO_LBL='wikitech-search'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
+GIT_BRANCH='wikitech-search'
+ANNOY_EMB_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/embeddings.ann'
+ANNOY_EMB_FN='embeddings.ann'
+ANNOY_IDX_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/section_to_idx.pickle'
+ANNOY_IDX_FN='section_to_idx.pickle'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -31,7 +36,6 @@ rm -rf ${SRV_PATH}
 mkdir -p ${SRV_PATH}/sock
 rm -rf ${ETC_PATH}
 mkdir -p ${ETC_PATH}
-mkdir -p ${ETC_PATH}/resources
 rm -rf ${LOG_PATH}
 mkdir -p ${LOG_PATH}
 rm -rf ${LIB_PATH}
@@ -42,11 +46,15 @@ python3 -m venv ${LIB_PATH}/p3env
 source ${LIB_PATH}/p3env/bin/activate
 
 echo "Cloning repositories..."
-git clone --branch content-similarity ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
+
+echo "Downloading index files..."
+wget -O ${ETC_PATH}/${ANNOY_EMB_FN} ${ANNOY_EMB_URL}
+wget -O ${ETC_PATH}/${ANNOY_IDX_FN} ${ANNOY_IDX_URL}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
