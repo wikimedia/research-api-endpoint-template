@@ -35,7 +35,9 @@ IDX_TO_SECTION = []
 qa_model_name = "deepset/tinyroberta-squad2"
 QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
 
-MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
+@app.route('/api/models', methods=['GET'])
+def get_models():
+    return jsonify({'models': {'q&a':qa_model_name, 'emb':emb_model_name}})
 
 @app.route('/api/wikitech-search', methods=['GET'])
 def search_wikitext():
@@ -46,7 +48,7 @@ def search_wikitext():
     else:
         inputs = get_inputs(query, result_depth=3)
         answer = get_answer(query, [i['text'] for i in inputs])
-        result = {'query': query, 'search-results':inputs, 'answer':answer, 'models':MODEL_INFO}
+        result = {'query': query, 'search-results':inputs, 'answer':answer}
         return jsonify(result)
 
 
