@@ -3,7 +3,7 @@ import pickle
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-EMB_DIR = '/srv/api-endpoint'
+EMB_DIR = '/etc/api-endpoint'
 os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
 
 from annoy import AnnoyIndex
