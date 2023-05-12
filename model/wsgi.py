@@ -15,10 +15,7 @@ import mwparserfromhell
 import requests
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
-import torch
 import yaml
-
-torch.set_num_threads(1)
 
 app = Flask(__name__)
 

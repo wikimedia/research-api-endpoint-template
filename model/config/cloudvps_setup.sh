@@ -5,9 +5,9 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='wikitech-search'
-ANNOY_EMB_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/embeddings.ann'
+ANNOY_EMB_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/all-mpnet-base-v2_embeddings.ann'
 ANNOY_EMB_FN='embeddings.ann'
-ANNOY_IDX_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/section_to_idx.pickle'
+ANNOY_IDX_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/all-mpnet-base-v2_section-to-idx.pickle'
 ANNOY_IDX_FN='section_to_idx.pickle'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
