@@ -1,4 +1,3 @@
-annoy
 Flask
 Flask-Cors
 mwedittypes
@@ -6,4 +5,5 @@ mwparserfromhell
 requests
 PyYAML
 sentence-transformers
+sklearn
 transformers

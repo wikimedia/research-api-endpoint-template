@@ -1,20 +1,20 @@
 import logging
 import os
-import pickle
+import time
+from urllib.parse import unquote_plus
 
 # where nearest neighbor index and models will go
 # must be set before library imports
 EMB_DIR = '/etc/api-endpoint'
 os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
 
-from annoy import AnnoyIndex
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from mwedittypes.utils import wikitext_to_plaintext
-import mwparserfromhell
+import mwparserfromhell as mw
 import requests
 from sentence_transformers import SentenceTransformer
-from transformers import pipeline
+from sklearn.metrics.pairwise import cosine_similarity
 import yaml
 
 app = Flask(__name__)
@@ -28,41 +28,51 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-emb_model_name = 'sentence-transformers/all-mpnet-base-v2'
+emb_model_name = 'sentence-transformers/all-MiniLM-L12-v2' #all-mpnet-base-v2'
 EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
-ANNOY_INDEX = AnnoyIndex(768, 'angular')
-IDX_TO_SECTION = []
+MIN_SEQ_LEN = 10
+MAX_PARAS = 12
 
-qa_model_name = "deepset/tinyroberta-squad2"
-QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
-
-MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
+MODEL_INFO = {'emb':emb_model_name}
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
     return jsonify({'models': MODEL_INFO})
 
-@app.route('/api/wikitech-search', methods=['GET'])
-def search_wikitext():
+@app.route('/api/rank-sections', methods=['GET'])
+def rank_sections():
     """Natural language search of technical documentation."""
     query = request.args.get('query')
-    if not query:
-        return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
+    title = request.args.get('title')
+    domain = request.args.get('domain', 'en.wikipedia')
+    if not query or not title:
+        return jsonify({'error': '`query` parameter with natural-language search query and `title` with relevant article must be provided.'})
     else:
-        inputs = get_inputs(query, result_depth=3)
-        answer = get_answer(query, [i['text'] for i in inputs])
-        result = {'query': query, 'search-results':inputs, 'answer':answer}
+        query = unquote_plus(query)
+        start = time.time()
+        query_emb = EMB_MODEL.encode(query)
+        query_emb_time = time.time() - start
+        start = time.time()
+        wikitext = get_wikitext(title, domain)
+        passages = get_passages(wikitext, lang=domain.split('.')[0])
+        passage_time = time.time() - start
+        start = time.time()
+        ranked_passages = rank_passages(passages, title, query_emb)
+        embed_rank_passage_time = time.time() - start
+        result = {'query': query, 'title':title, 'domain':domain,
+                  'raw-passages':passages, 'ranked-passages':ranked_passages,
+                  'times': {'query-emb':query_emb_time, 'wikitext':passage_time, 'emb-rank':embed_rank_passage_time}}
         return jsonify(result)
 
 
-def get_wikitext(title, domain='wikitech.wikimedia'):
+def get_wikitext(title, domain='en.wikipedia'):
     """Get wikitext for an article."""
     try:
         base_url = f"https://{domain}.org/w/api.php"
         params = {
             "action": "query",
             "prop": "revisions",
-            "titles": title.split('#', maxsplit=1)[0],
+            "titles": title,
             "rvslots": "*",
             "rvprop": "content",
             "rvdir": "older",
@@ -79,79 +89,65 @@ def get_wikitext(title, domain='wikitech.wikimedia'):
         return None
 
 
-def get_section_plaintext(title, wikitext):
-    """Convert section wikitext into plaintext.
-
-    This does a few things:
-    * Excludes certain types of nodes -- e.g., references, templates.
-    * Strips wikitext syntax -- e.g., all the brackets etc.
-    ."""
-    try:
-        section = title.split('#', maxsplit=1)[1]
-        for s in mwparserfromhell.parse(wikitext).get_sections(flat=True):
-            try:
-                header = s.filter_headings()[0].title.strip().replace(' ', '_')
-                if header == section:
-                    return wikitext_to_plaintext(s)
-            except Exception:
-                continue
-    except Exception:
-        # default to first section if no section in title
-        return wikitext_to_plaintext(mwparserfromhell.parse(wikitext).get_sections(flat=True)[0])
+def get_passages(wikitext, lang='en'):
+    passages = []
+    num_retained = 0
+    for i, section in enumerate(mw.parse(wikitext).get_sections(flat=True)):
+        section_plaintext = wikitext_to_plaintext(section, lang=lang).strip()
+        section_header = 'Lead'
+        if section.filter_headings():
+            section_header = section.filter_headings()[0].title.strip()
+        section_passages = []
+        for paragraph in section_plaintext.split('\n\n'):
+            paragraph = paragraph.strip()
+            if len(paragraph) > MIN_SEQ_LEN:
+                section_passages.append(paragraph)
+        passages.append({'title':section_header, 'kept':num_retained < MAX_PARAS, 'passages':section_passages})
+        num_retained += len(section_passages)
+    return passages
 
 
-def get_answer(query, context):
-    """Run Q&A model to extract best answer to query."""
-    qa_input = {
-        'question': query,
-        'context': '\n'.join(context)  # maybe reverse inputs?
-    }
-    try:
-        res = QA_MODEL(qa_input)
-        return res['answer']
-    except Exception:
-        return None
+def rank_passages(passages, page_title, query_emb):
+    ranked_passages = [passages[0]]
+    page_title = page_title.replace('_', ' ')
+    max_sims = {}
+    for i, section in enumerate(passages[1:], start=1):
+        section_title = section['title']
+        section_prefix = f'{page_title}. {section_title}. '
+        max_sims[i] = -1
+        for passage in section['passages']:
+            para_emb = EMB_MODEL.encode(section_prefix + passage)
+            sim = cosine_similarity([query_emb], [para_emb])
+            max_sims[i] = max(sim, max_sims[i])
 
+    sections_by_sim = sorted(max_sims, key=max_sims.get, reverse=True)
+    num_retained = len(ranked_passages[0]['passages'])
+    for section_idx in sections_by_sim:
+        section_info = passages[section_idx]
+        ranked_passages.append({'title':section_info['title'], 'kept':num_retained < MAX_PARAS,
+                                'passages':section_info['passages']})
+        num_retained += len(section_info['passages'])
 
-def get_inputs(query, result_depth=3):
-    """Build inputs to Q&A model for query."""
-    embedding = EMB_MODEL.encode(query)
-    nns = ANNOY_INDEX.get_nns_by_vector(embedding, result_depth, search_k=-1, include_distances=True)
-    results = []
-    for i in range(result_depth):
-        idx = nns[0][i]
-        score = 1 - nns[1][i]
-        title = IDX_TO_SECTION[idx]
-        try:
-            wt = get_wikitext(title)
-            pt = get_section_plaintext(title, wt).strip()
-            results.append({'title':title, 'score':score, 'text':pt})
-        except Exception:
-            continue
+    return ranked_passages
 
-    return results
-
-def load_similarity_index():
-    """Load in nearest neighbor index and labels."""
-    global IDX_TO_SECTION
-    index_fp = os.path.join(EMB_DIR, 'embeddings.ann')
-    labels_fp = os.path.join(EMB_DIR, 'section_to_idx.pickle')
-    print("Using pre-built ANNOY index")
-    ANNOY_INDEX.load(index_fp)
-    with open(labels_fp, 'rb') as fin:
-        IDX_TO_SECTION = pickle.load(fin)
-    print(f"{len(IDX_TO_SECTION)} passages in nearest neighbor index.")
 
 def test():
-    query = 'what is toolforge?'
-    print('getting inputs.')
-    inputs = get_inputs(query, result_depth=3)
-    print('getting answer.')
-    answer = get_answer(query, [i['text'] for i in inputs])
-    result = {'query': query, 'search-results': inputs, 'answer': answer, 'models': MODEL_INFO}
+    start = time.time()
+    query = unquote_plus('When+did+Tomáš+Satoranský+sign+with+the+Wizards?')
+    title = 'Tomáš_Satoranský'
+    domain = 'en.wikipedia'
+    print('embedding query.')
+    query_emb = EMB_MODEL.encode(query)
+    print('getting wikitext.')
+    wikitext = get_wikitext(title, domain)
+    print('getting passages.')
+    passages = get_passages(wikitext, lang=domain.split('.')[0])
+    print('ranking passages.')
+    ranked_passages = rank_passages(passages, title, query_emb)
+    result = {'query': query, 'title': title, 'domain': domain,
+              'raw-passages': passages, 'ranked-passages': ranked_passages, 'total-time':time.time() - start}
     print(result)
 
-load_similarity_index()
 test()
 
 if __name__ == '__main__':

@@ -4,11 +4,7 @@
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-GIT_BRANCH='wikitech-search'
-ANNOY_EMB_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/all-mpnet-base-v2_embeddings.ann'
-ANNOY_EMB_FN='embeddings.ann'
-ANNOY_IDX_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/hackathon-23/all-mpnet-base-v2_section-to-idx.pickle'
-ANNOY_IDX_FN='section_to_idx.pickle'
+GIT_BRANCH='rank-sections'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -49,10 +45,6 @@ pip install wheel
 pip install gunicorn[gevent]
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
-
-echo "Downloading index files..."
-wget -O ${ETC_PATH}/${ANNOY_EMB_FN} ${ANNOY_EMB_URL}
-wget -O ${ETC_PATH}/${ANNOY_IDX_FN} ${ANNOY_IDX_URL}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}

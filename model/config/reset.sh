@@ -3,7 +3,7 @@
 
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-GIT_BRANCH='wikitech-search'
+GIT_BRANCH='rank-sections'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
