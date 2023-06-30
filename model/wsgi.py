@@ -143,7 +143,7 @@ def assess_labels_descs(item):
     # NOTE: this works without throwing errors because English is always expected
     # but if that criterion is dropped, then we'll have to decide if no sitelinks + no labels/descs
     # is a score of 0, 1, or something in between...
-    return max(1, (expected_labels_found + expected_descs_found) / (2 * len(expected_labels_descs)))
+    return min(1, (expected_labels_found + expected_descs_found) / (2 * len(expected_labels_descs)))
 
 
 def assess_existing_references(item):
