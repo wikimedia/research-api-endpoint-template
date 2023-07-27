@@ -5,5 +5,5 @@ mwparserfromhell
 requests
 PyYAML
 sentence-transformers
-sklearn
+scikit-learn
 transformers
