@@ -24,15 +24,15 @@ def get_outlinks_details():
     return get_details()
 
 def qual_to_cat(q):
-    if q <= 0.167:
+    if q <= 0.36:
         return 'Stub'
-    elif q <= 0.33:
+    elif q <= 0.54:
         return 'Start'
-    elif q <= 0.5:
+    elif q <= 0.65:
         return 'C-class'
-    elif q <= 0.667:
+    elif q <= 0.78:
         return 'B-class'
-    elif q <= 0.833:
+    elif q <= 0.88:
         return 'GA'
     elif q <= 1:
         return 'FA'
@@ -50,7 +50,7 @@ def get_details():
         qual_by_title = add_quality_data(links)
         qual_dist = get_distribution(set(links.values()))
         num_links = len(links)
-        result = {'article': 'https://{0}.wikipedia.org/wiki/{1}'.format(lang, page_title),
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
                   'num_links': num_links,
                   'summary': [{'qual': q[0], 'num_links': q[1], 'pct_links':q[1] / num_links} for q in qual_dist],
                   'details': [{'title':q[0], 'qual':q[1]} for q in qual_by_title]
@@ -140,7 +140,7 @@ def get_links(title, lang, limit=1500, session=None, verbose=False):
 def get_canonical_page_title(title, lang, session=None):
     """Resolve redirects / normalization -- used to verify that an input page_title exists"""
     if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+        session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
 
     result = session.get(
         action="query",
