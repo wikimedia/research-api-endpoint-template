@@ -1,158 +1,176 @@
+# Flask API that compares claims on Wikipedia to their sources.
+#
+# Based on: https://github.com/facebookresearch/side
+# Goal: Help prioritize citations on English Wikipedia for verification / improvement
+#
+# Components:
+# * web_source: gather passages from a given external URL for verification
+# * wiki_claim: extract claims (text + citation URL supposedly supporting it) from a Wikipedia article
+# * SentenceTransformer: language model for comparing two passages and computing some form of support or similarity.
+#    * <guidance on interpreting scores>
+#    * <guidance on loading time / processing time>
+#
+# API Endpoints:
+# * /api/verify-random-claim: explore the model -- fetch a random citation from a Wikipedia article and evaluate it
+# * /api/get-all-claims: generate input data -- get all claims for a Wikipedia article
+# * /api/verify-claim: verify a single claim -- check a claim from get-all-claims
+
 import logging
 import os
-import pickle
+import random
+import sys
+import time
 
 # where nearest neighbor index and models will go
 # must be set before library imports
 EMB_DIR = '/etc/api-endpoint'
+
 os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
 
-from annoy import AnnoyIndex
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from mwedittypes.utils import wikitext_to_plaintext
-import mwparserfromhell
-import requests
-from sentence_transformers import SentenceTransformer
-from transformers import pipeline
+import mwapi
+from sentence_transformers import CrossEncoder
 import yaml
+
+__dir__ = os.path.dirname(__file__)
+__updir = os.path.abspath(os.path.join(__dir__, '..'))
+sys.path.append(__updir)
+sys.path.append(__dir__)
+
+from passages.web_source import get_passages
+from passages.wiki_claim import get_claims
 
 app = Flask(__name__)
 
-__dir__ = os.path.dirname(__file__)
-
 # load in app user-agent or any other app config
 app.config.update(
-    yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
+    yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))  # __updir
 
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-emb_model_name = 'sentence-transformers/all-mpnet-base-v2'
-EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
-ANNOY_INDEX = AnnoyIndex(768, 'angular')
-IDX_TO_SECTION = []
-
-qa_model_name = "deepset/tinyroberta-squad2"
-QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
-
-MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
+model_name = 'cross-encoder/nli-deberta-v3-base'
+start = time.time()
+MODEL = CrossEncoder(model_name) #, cache_folder=EMB_DIR)
+logging.info(f'{time.time() - start:.1f} seconds for model loading.')
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
-    return jsonify({'models': MODEL_INFO})
+    return jsonify({'model': model_name})
 
-@app.route('/api/wikitech-search', methods=['GET'])
-def search_wikitext():
-    """Natural language search of technical documentation."""
-    query = request.args.get('query')
-    if not query:
-        return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
+@app.route('/api/verify-random-claim', methods=['GET'])
+def verify_random_claim():
+    page_title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'error': error})
     else:
-        inputs = get_inputs(query, result_depth=3)
-        answer = get_answer(query, [i['text'] for i in inputs])
-        result = {'query': query, 'search-results':inputs, 'answer':answer}
+        claims = get_claims(title=page_title, user_agent=app.config['CUSTOM_UA'])
+        if claims:
+            claim = random.choice(claims)
+            url, section, text = claim
+            result = {'article': f'https://en.wikipedia.org/wiki/{page_title}',
+                      'claim': {'url':url, 'section':section, 'text':text},
+                      'passages':[]
+                      }
+            for passage in get_passages(url=url, user_agent=app.config['CUSTOM_UA']):
+                if passage is not None:
+                    start = time.time()
+                    source_title, passage_text = passage
+                    score = get_score(text, f'{source_title}. {passage}')
+                    result['source_title'] = source_title
+                    result['passages'].append({'passage':passage_text, 'score':score, 'time (s)':time.time() - start})
+            return jsonify(result)
+        else:
+            return jsonify({'error':f'no verifiable claims for https://en.wikipedia.org/wiki/{page_title}'})
+
+@app.route('/api/get-all-claims', methods=['GET'])
+def get_all_claims():
+    page_title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'error': error})
+    else:
+        claims = get_claims(title=page_title, user_agent=app.config['CUSTOM_UA'])
+        result = {'article': f'https://en.wikipedia.org/wiki/{page_title}',
+                  'claims': [{'url': c[0], 'section': c[1], 'text': c[2]} for c in claims]
+                  }
         return jsonify(result)
 
+@app.route('/api/verify-claim', methods=['POST'])
+def verify_claim():
+    """Verify a claim.
 
-def get_wikitext(title, domain='wikitech.wikimedia'):
-    """Get wikitext for an article."""
+    Fields:
+    * wiki_claim (str): passage from a Wikipedia article that crucially contains a [CIT] token indicating where a citation occurs to be evaluated
+        * Only text before first [CIT] token is considered; if no [CIT] token then full passage considered.
+        * Claim is expected in the form of "<article title> [SEP] <section title> [SEP] <pre-citation passage> [CIT] <post-citation passage>"
+        * Pre-citation passages should generally be ~150 words.
+    * source_url (str): source URL from which passages are fetched to score.
+    """
     try:
-        base_url = f"https://{domain}.org/w/api.php"
-        params = {
-            "action": "query",
-            "prop": "revisions",
-            "titles": title.split('#', maxsplit=1)[0],
-            "rvslots": "*",
-            "rvprop": "content",
-            "rvdir": "older",
-            "rvlimit": 1,
-            "format": "json",
-            "formatversion": 2
-        }
-        r = requests.get(url=base_url,
-                         params=params,
-                         headers={'User-Agent': app.config['CUSTOM_UA']})
-        rj = r.json()
-        return rj['query']['pages'][0]['revisions'][0]['slots']['main']['content']
-    except Exception:
+        wiki_claim = request.form['wiki_claim']
+        source_url = request.form['source_url']
+    except KeyError:
+        return jsonify({'error':f'Received {request.form.keys()} but expected the following fields: wiki_claim: str, source_url: str'})
+
+    result = {'passages':[]}
+    pass_idx = 0
+    for passage in get_passages(url=source_url, user_agent=app.config['CUSTOM_UA']):
+        if passage is not None:
+            pass_idx += 1
+            start = time.time()
+            source_title, passage_text = passage
+            score = get_score(wiki_claim, f'{source_title}. {passage}')
+            result['source_title'] = source_title
+            result['passages'].append({'passage': passage_text, 'score': score,
+                                       'idx':pass_idx, 'time (s)': time.time() - start})
+
+    # Rank from most to least support
+    result['passages'] = sorted(result['passages'], key=lambda x: x.get('score', -1), reverse=True)
+    return jsonify(result)
+
+def get_score(wiki_claim, passage):
+    """Score the support of a claim from a given passage."""
+    scores = MODEL.predict([(wiki_claim, passage), ], apply_softmax=True)
+
+    # Convert scores to labels
+    label_mapping = ['contradiction', 'entailment', 'neutral']
+    labels = list(zip(label_mapping, [float(s) for s in scores[0]]))
+    return labels
+
+def get_canonical_page_title(title, session=None):
+    """Resolve redirects / normalization -- used to verify that an input page_title exists"""
+    if session is None:
+        session = mwapi.Session('https://en.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
+
+    result = session.get(
+        action="query",
+        prop="info",
+        inprop='',
+        redirects='',
+        titles=title,
+        format='json',
+        formatversion=2
+    )
+    if 'missing' in result['query']['pages'][0]:
         return None
+    else:
+        return result['query']['pages'][0]['title']
 
+def validate_api_args():
+    """Validate API arguments for language-agnostic model."""
+    error = None
+    page_title = None
+    if request.args.get('title'):
+        page_title = get_canonical_page_title(request.args['title'])
+        if page_title is None:
+            error = f'no matching article for "https://en.wikipedia.org/wiki/{request.args["title"]}"'
+    else:
+        error = 'missing title -- e.g., "2005_World_Series" for "https://en.wikipedia.org/wiki/2005_World_Series"'
 
-def get_section_plaintext(title, wikitext):
-    """Convert section wikitext into plaintext.
+    return page_title, error
 
-    This does a few things:
-    * Excludes certain types of nodes -- e.g., references, templates.
-    * Strips wikitext syntax -- e.g., all the brackets etc.
-    ."""
-    try:
-        section = title.split('#', maxsplit=1)[1]
-        for s in mwparserfromhell.parse(wikitext).get_sections(flat=True):
-            try:
-                header = s.filter_headings()[0].title.strip().replace(' ', '_')
-                if header == section:
-                    return wikitext_to_plaintext(s)
-            except Exception:
-                continue
-    except Exception:
-        # default to first section if no section in title
-        return wikitext_to_plaintext(mwparserfromhell.parse(wikitext).get_sections(flat=True)[0])
-
-
-def get_answer(query, context):
-    """Run Q&A model to extract best answer to query."""
-    qa_input = {
-        'question': query,
-        'context': '\n'.join(context)  # maybe reverse inputs?
-    }
-    try:
-        res = QA_MODEL(qa_input)
-        return res['answer']
-    except Exception:
-        return None
-
-
-def get_inputs(query, result_depth=3):
-    """Build inputs to Q&A model for query."""
-    embedding = EMB_MODEL.encode(query)
-    nns = ANNOY_INDEX.get_nns_by_vector(embedding, result_depth, search_k=-1, include_distances=True)
-    results = []
-    for i in range(result_depth):
-        idx = nns[0][i]
-        score = 1 - nns[1][i]
-        title = IDX_TO_SECTION[idx]
-        try:
-            wt = get_wikitext(title)
-            pt = get_section_plaintext(title, wt).strip()
-            results.append({'title':title, 'score':score, 'text':pt})
-        except Exception:
-            continue
-
-    return results
-
-def load_similarity_index():
-    """Load in nearest neighbor index and labels."""
-    global IDX_TO_SECTION
-    index_fp = os.path.join(EMB_DIR, 'embeddings.ann')
-    labels_fp = os.path.join(EMB_DIR, 'section_to_idx.pickle')
-    print("Using pre-built ANNOY index")
-    ANNOY_INDEX.load(index_fp)
-    with open(labels_fp, 'rb') as fin:
-        IDX_TO_SECTION = pickle.load(fin)
-    print(f"{len(IDX_TO_SECTION)} passages in nearest neighbor index.")
-
-def test():
-    query = 'what is toolforge?'
-    print('getting inputs.')
-    inputs = get_inputs(query, result_depth=3)
-    print('getting answer.')
-    answer = get_answer(query, [i['text'] for i in inputs])
-    result = {'query': query, 'search-results': inputs, 'answer': answer, 'models': MODEL_INFO}
-    print(result)
-
-load_similarity_index()
-test()
+application = app
 
 if __name__ == '__main__':
     app.run()

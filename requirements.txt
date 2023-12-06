@@ -1,9 +1,9 @@
-annoy
+beautifulsoup4
 Flask
 Flask-Cors
-mwedittypes
+mwapi
 mwparserfromhell
-requests
+protobuf
 PyYAML
+requests
 sentence-transformers
-transformers
