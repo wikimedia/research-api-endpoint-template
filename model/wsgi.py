@@ -53,7 +53,7 @@ def get_neighbors():
                 else:
                     break
         else:
-            emb = item_to_embedding(args['qid'])
+            emb = item_to_embedding(get_wiki_sitelinks(args['qid']))
             if emb is not None:
                 for idx, dist in zip(*ANNOY_INDEX.get_nns_by_vector(emb, args['k'], include_distances=True)):
                     sim = 1 - dist
@@ -126,9 +126,22 @@ def add_article_titles(lang, results, n_batch=50):
             qid_idx = qids[qid]
             results[qid_idx]['title'] = sitelinks['entities'].get(qid, {}).get('sitelinks', {}).get(wiki, {}).get('title', '-')
 
-def item_to_embedding(qid):
-    # emb = ' '.join(['{0:.3f}'.format(d) for d in ft_model.get_sentence_vector(outlinks)])
-    lang_to_title = get_wiki_sitelinks(qid)
+@app.route('/api/v1/embedding', methods=['GET'])
+def get_embedding():
+    qid = request.args.get('qid', '').upper()
+    lang = request.args.get('lang', '').lower().replace('wiki', '')
+    title = request.args.get('title') or request.args.get('page_title')
+    if qid and validate_qid_format(qid):
+        lang_to_title = get_wiki_sitelinks(qid)
+        emb = item_to_embedding(lang_to_title)
+    elif lang in WIKIPEDIA_LANGUAGES and title:
+        lang_to_title = {lang: title}
+        emb = item_to_embedding(lang_to_title)
+    else:
+        emb = None
+    return jsonify({"embedding": emb})
+
+def item_to_embedding(lang_to_title):
     qids = []
     for lang, page_title in lang_to_title.items():
         qids.extend(get_outlinks(lang, page_title))
