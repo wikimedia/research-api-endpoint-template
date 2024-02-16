@@ -142,7 +142,7 @@ def get_embedding():
 
     if emb is not None:
         emb = emb.tolist()  # can't jsonify np.ndarray
-    return jsonify({"embedding": emb})
+    return jsonify([{"vector": emb}])
 
 def item_to_embedding(lang_to_title):
     qids = []
