@@ -139,6 +139,9 @@ def get_embedding():
         emb = item_to_embedding(lang_to_title)
     else:
         emb = None
+
+    if emb is not None:
+        emb = emb.tolist()  # can't jsonify np.ndarray
     return jsonify({"embedding": emb})
 
 def item_to_embedding(lang_to_title):
