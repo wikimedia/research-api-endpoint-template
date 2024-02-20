@@ -600,13 +600,13 @@ def wikitext_to_features(wikitext, lang='en', level=3):
     """Gather counts of article components directly from wikitext.
 
     Pros:
-    * Much faster than mwparserfromhell (10x speed-up in testing) -- e.g., 200 µs vs. 2 ms for medium-sized article
+    * Regex is much faster than mwparserfromhell (10x speed-up in testing) -- e.g., 200 µs vs. 2 ms for medium-sized article
     * Extended to catch some edge-cases -- e.g., images added via infoboxes/galleries that lack bracket syntax
 
     Cons/Issues:
     * Misses intra-nested links:
         * e.g. [[File:Image.jpg|Image with a [[caption]]]] only catches the File and not the [[caption]]
-        * Could be extended by also regexing each link found, which should catch almost all
+        * Could be extended by also regexing each link found, which should catch almost all, but more costly
     * Misses references added via templates w/o ref tags -- e.g., shortened-footnote templates.
     """
     try:
@@ -655,7 +655,7 @@ def qual_score_to_class(score):
         return None
 
 def get_quality(lang, title=None, revid=None):
-    """Gather set of up to `limit` outlinks for an article."""
+    """Get quality score for a given article (current version) or revision."""
     session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
 
     # get wikitext for article
