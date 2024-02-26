@@ -1,6 +1,6 @@
-beautifulsoup4
 Flask
 Flask-Cors
 mwapi
 PyYAML
+requests
 uWSGI
