@@ -1,10 +1,9 @@
-from copy import deepcopy
 import os
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mwapi
-import mwparserfromhtml as mw
+from mwparserfromhtml import Article
 import requests
 import yaml
 
@@ -13,8 +12,6 @@ __dir__ = os.path.dirname(__file__)
 
 WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
 
-__dir__ = os.path.dirname(__file__)
-
 # load in app user-agent or any other app config
 app.config.update(
     yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
@@ -22,77 +19,39 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-BASE_ARTICLE_JSON = {
-    "name": "",
-    "identifier": -1,
-    "date_modified": "1970-01-01T00:00:00Z",
-    "version": {
-        "identifier": -1,
-        "editor": {"identifier": -1, "name": ""},
-    },
-    "url": "",
-    "namespace": {"name": "Article", "identifier": 0},
-    "in_language": {"name": "English", "identifier": ""},
-    "main_entity": {
-        "identifier": "",
-        "url": "",
-    },
-    "is_part_of": {"name": "Wikipedia", "identifier": ""},
-    "article_body": {
-        "html": "",
-        "wikitext": "",
-    },
-    "license": [
-        {
-            "name": "Creative Commons Attribution Share Alike 3.0 Unported",
-            "identifier": "CC-BY-SA-3.0",
-            "url": "https://creativecommons.org/licenses/by-sa/3.0/",
-        }
-    ],
-}
-
 @app.route('/api/v1/parse-article', methods=['GET'])
 def parse_article():
     lang, title, error = validate_api_args()
     if error:
         return jsonify({'error': error})
-    article_obj = deepcopy(BASE_ARTICLE_JSON)
-    article_obj['name'] = title
-    article_obj['url'] = f'https://{lang}.wikipedia.org/wiki/{title}'
-    article_obj['in_language']['identifier'] = lang
-    article_obj['is_part_of']['identifier'] = lang
     article_html = get_article_html(lang, title)
-    article_obj['article_body']['html'] = article_html
-    plaintext, features = parse_html(article_obj)
+    plaintext, features = parse_html(article_html)
     return jsonify({'lang': lang, 'title': title,
                     'plaintext': plaintext, 'features': features})
 
-def parse_html(article_obj):
+def parse_html(raw_html):
     """Extract plaintext and various features from Wikipedia article HTML.
 
     NOTE: input format should match that of the Enterprise Dumps
     """
+    features = {}
+    plaintext = ""
     try:
-        parsed_article = mw.Article(article_obj)
-        num_refs = len(parsed_article.get_references())
-        num_headings = len(parsed_article.get_headers())
-        num_sections = len(parsed_article.get_sections())
-        num_redlinks = 0
-        namespace_dist = {}
-        links = parsed_article.get_wikilinks()
-        for l in links:
-            namespace_dist[l.namespace_id] = namespace_dist.get(l.namespace_id, 0) + 1
-            if l.redlink:
-                num_redlinks += 1
-        num_external_links = len(parsed_article.get_externallinks())
-        num_non_transcluded_catetgories = len([c for c in parsed_article.get_categories() if not c.transclusion])
-        plaintext = parsed_article.get_plaintext(skip_transclusion=True, skip_categories=True)
-        return plaintext, {'num_refs':num_refs, 'num_headings':num_headings, 'num_sections':num_sections,
-                           'num_redlinks':num_redlinks, 'namespaces':namespace_dist,
-                           'num_external_links':num_external_links,
-                           'num_nontranscluded_categories':num_non_transcluded_catetgories}
+        parsed_article = Article(raw_html)
+        ws = parsed_article.wikistew
+        features['# Sections'] = len(ws.get_sections())
+        features['References'] = f"{len(ws.get_references())} sources; {len(ws.get_citations())} citations"
+        features['Links'] = f"{len(ws.get_externallinks())} external links; {len(ws.get_wikilinks())} wikilinks; {len(ws.get_categories())} categories"
+        features['Boxes'] = f"{len(ws.get_infobox())} infobox; {len(ws.get_notes())} notes; {len(ws.get_nav_boxes())} navboxes; {len(ws.get_message_boxes())} message boxes; {len(ws.get_wikitables())} wikitables"
+        max_icon_pixel_area = 2500  # (50 x 50)
+        article_images = [i for i in ws.get_images() if (i.height * i.width) > max_icon_pixel_area]
+        article_icons = [i for i in ws.get_images() if (i.height * i.width) <= max_icon_pixel_area]
+        features['Media'] = f"{len(article_images)} images ({len([1 for i in article_images if i.caption])} w/ captions); {len(article_icons)} icons; {len(ws.get_audio())} audio; {len(ws.get_video())} video"
+        plaintext = html_to_plaintext(parsed_article)
     except Exception:
-        return '', {}
+        print('exc')
+        pass
+    return plaintext, features
 
 def get_article_html(lang, title):
     """Get Parsoid HTML for article -- matches what's in Enterprise HTML dumps."""
@@ -103,6 +62,50 @@ def get_article_html(lang, title):
         return response.text
     except Exception:
         return ""
+
+
+def html_to_plaintext(article):
+    """Convert Parsoid HTML to reasonable plaintext."""
+    # this catches things like infoboxes or message boxes that might have paragraph elements
+    # within them but are fully-transcluded and so are probably boilerplate messages and
+    # unlikely to be topic-specific article content.
+    exclude_transcluded_paragraphs = True
+
+    # these elements generally are not text (e.g., Citations footnotes like `[1]`)
+    # or do not have well-formed text such as Tables or Lists.
+    # A less conservative approach might retain Wikitables or Tables but apply some
+    # additional guardrails around the length of content from a specific list element
+    # or table cell to be included. In reality, that'd require re-writing the
+    # `get_plaintext` function:
+    # https://gitlab.wikimedia.org/repos/research/html-dumps/-/blob/main/src/mwparserfromhtml/parse/article.py?ref_type=heads#L325
+    exclude_elements = {"Category", "Citation", "Comment", "Heading",
+                        "Infobox", "List", "Math",
+                        "Media-audio", "Media-img", "Media-video",
+                        "Messagebox", "Navigational", "Note", "Reference",
+                        "TF-sup",  # superscript -- catches Citation-needed tags etc.
+                        "Table", "Wikitable"}
+
+    # this ensures that only content that appears under a <p> element is retained.
+    # Much of this is redundant with the `exclude_elements` above and setting
+    # `exclude_transcluded_paragraphs` to True but this is a reasonable guardrail.
+    exclude_para_context = {"pre-first-para", "between-paras", "post-last-para"}
+
+    paragraphs = [paragraph.strip()
+                  for heading, paragraph
+                  in article.wikistew.get_plaintext(
+            exclude_transcluded_paragraphs=exclude_transcluded_paragraphs,
+            exclude_para_context=exclude_para_context,
+            exclude_elements=exclude_elements
+        ) if len(paragraph.strip()) > 15]
+
+    # final check that at least 20 characters.
+    # this mainly is to catch some bugs in the Enterprise dumps where e.g., poorly-
+    # formatted redirects manage to slip through still.
+    if paragraphs:
+        plaintext = '\n'.join(paragraphs)
+        if len(plaintext) > 20:
+            return plaintext
+    return ""
 
 def get_canonical_page_title(title, lang):
     """Resolve redirects / normalization -- used to verify that an input page_title exists"""
