@@ -156,7 +156,7 @@ def get_item():
     return qid, claims, error
 
 def load_region_data():
-    countries_tsv = "./countries.tsv"
+    countries_tsv = os.path.join(__dir__, "countries.tsv")
     countries_header = ['name', 'iso_code', 'iso_alpha3_code', 'wikidata_id', 'is_protected', 'data_risk_score', 'data_risk_classification',
                         'maxmind_continent', 'un_continent', 'un_subcontinent', 'un_m49_code', 'wikimedia_region', 'grant_committee_region',
                         'form_990_region', 'economic_region', 'emerging_classification', 'is_eu', 'is_un_member', 'is_un_data_entity',
@@ -180,7 +180,7 @@ def load_region_data():
             QID_TO_REGION[qid] = region_name
     print(f"Loaded {len(QID_TO_REGION)} QID-region pairs for matching against Wikidata -- e.g., Q31: {QID_TO_REGION['Q31']}")
     
-    aggregation_tsv = "./country_aggregation.tsv"
+    aggregation_tsv = os.path.join(__dir__, "country_aggregation.tsv")
     aggregation_header = ['Aggregation', 'From', 'QID To', 'QID From']
     qid_to_idx = aggregation_header.index("QID To")
     qid_from_idx = aggregation_header.index("QID From")
@@ -203,7 +203,7 @@ def load_region_data():
     print(f"Now {len(QID_TO_REGION)} QID-region pairs after adding aggregations -- e.g., Q40362: {QID_TO_REGION['Q40362']}")
 
     # load in geometries for the regions identified via Wikidata
-    region_geoms_geojson = "./ne_10m_admin_0_map_units.geojson"
+    region_geoms_geojson = os.path.join(__dir__, "ne_10m_admin_0_map_units.geojson")
     if not os.path.exists(region_geoms_geojson):
         region_geoms_url = "https://github.com/geohci/wiki-region-groundtruth/raw/main/resources/ne_10m_admin_0_map_units.geojson"
         response = requests.get(region_geoms_url)
