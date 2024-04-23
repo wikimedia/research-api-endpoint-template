@@ -2,4 +2,3 @@
 CUSTOM_UA: "wiki-region (cloud VPS) -- isaac@wikimedia.org"
 
 DEBUG: False
-JSON_SORT_KEYS: False

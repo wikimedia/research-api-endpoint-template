@@ -1,7 +1,6 @@
 Flask
 Flask-Cors
-mwapi
-mwconstants
 PyYAML
-sqlitedict
+requests
+shapely
 uWSGI
