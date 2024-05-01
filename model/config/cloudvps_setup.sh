@@ -5,6 +5,7 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 REPO_LBL='topicmodel'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
+SQLITE_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/geography/region-groundtruth-2024-04-01.sqlite'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -43,6 +44,11 @@ git clone --branch region-api ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
 echo "Installing repositories..."
 pip install wheel
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
+
+echo "Downloading data, hang on..."
+cd ${TMP_PATH}
+wget -O country_groundtruth.sqlite ${SQLITE_WGET}
+mv country_groundtruth.sqlite ${ETC_PATH}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
