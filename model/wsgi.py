@@ -37,10 +37,9 @@ COUNTRY_PROPERTIES = {
     "P1532": "country for sport",
     "P3842": "located in present-day administrative territorial entity",
     }
-db_fn = 'country_groundtruth.sqlite'
+db_fn = os.path.join(__dir__, 'country_groundtruth.sqlite')
 if os.path.exists(db_fn):
-    GROUNDTRUTH = SqliteDict(os.path.join(__dir__, db_fn),
-                         autocommit=False)
+    GROUNDTRUTH = SqliteDict(db_fn, autocommit=False)
     print(f"{len(GROUNDTRUTH)} QIDs in groundtruth.")
     print(f"Example (Inaccessible Island): {GROUNDTRUTH['Q914225']}")
 else:
