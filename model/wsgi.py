@@ -8,6 +8,9 @@ from urllib.request import urlretrieve
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mwapi
+from mwparserfromhtml import Article
+from mwparserfromhtml.parse.utils import is_transcluded
+import requests
 import yaml
 
 
@@ -16,7 +19,7 @@ __dir__ = os.path.dirname(__file__)
 
 WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz', 'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg', 'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs', 'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co', 'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv', 'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro', 'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk', 'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr', 'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh', 'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw', 'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo', 'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk', 'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah', 'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso', 'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl', 'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro', 'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd', 'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr', 'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv', 'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo', 'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan', 'zh-yue', 'zu']
 MAX_QUAL_VALS = {}
-MQV_FN = os.path.join(__dir__, 'resources/quality-maxvals-by-wiki.tsv.gz')
+MQV_FN = os.path.join(__dir__, 'quality-maxvals-by-wiki.tsv.gz')
 SFN_TEMPLATES = [t.lower() for t in ["Shortened footnote template", "sfn", "Sfnp", "Sfnm", "Sfnmp"]]
 
 COEF_LEN = 0.395
@@ -586,6 +589,19 @@ def quality_revid():
     return jsonify({'lang': lang, 'revid': revid, 'quality': quality,
                     'class': qual_score_to_class(quality), 'features': features})
 
+@app.route('/api/v1/quality-revid-compare', methods=['GET'])
+def quality_revid_compare():
+    lang, revid, error = validate_revid_api_args()
+    if error:
+        return jsonify({'error': error})
+    wikitext_quality, _ = get_quality(lang, revid=revid)
+    html_rr_score, html_rr_label, html_ord_score, html_ord_label = get_html_predictions(lang, revid)
+    return jsonify({'lang': lang, 'revid': revid,
+                    'quality-wikitext': wikitext_quality, 'class-wikitext': qual_score_to_class(wikitext_quality),
+                    'quality-html-linear': html_rr_score, 'class-html-linear': html_rr_label,
+                    'quality-html-ordinal': html_ord_score, 'class-html-ordinal': html_ord_label
+                    })
+
 @app.route('/api/v1/quality-article-features', methods=['GET'])
 def quality_article_features():
     lang, title, error = validate_api_args()
@@ -801,6 +817,181 @@ def load_quality_maxvals():
                                    'c':max(MIN_MAX_CAT, cats),
                                    'w':max(MIN_MAX_LIN, links)}
 
+HTML_MAX_QUAL_VALS = {}
+
+def get_html_predictions(lang, revid):
+    article_html = get_article_html(lang, revid)
+    if article_html is not None:
+        page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes = get_article_features(article_html)
+        if page_length > 0:
+            length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x, sources_x, infoboxes_x, messageboxes_x = normalize_features(lang, page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes)
+            html_rr_score = (0.594 * length_x) + (0.193 * refs_x) + (0.107 * wikilinks_x) + (0.093 * categories_x) + (-0.013 * media_x) + (-0.039 * headings_x) + (0.105 * sources_x) + (0.007 * infoboxes_x) + (-0.046 * messageboxes_x)
+            html_rr_score = max(min(html_rr_score, 1), 0)
+            html_rr_label = qual_score_to_class(html_rr_score)
+            html_ord_score = (6.309 * length_x) + (1.198 * refs_x) + (0.647 * wikilinks_x) + (0.113 * categories_x) + (0.932 * media_x) + (0.292 * headings_x) + (0.174 * sources_x) + (0.344 * infoboxes_x) + (-0.946 * messageboxes_x)
+            thresholds = [4.27085935, 7.10500962, 8.64130528, 9.70745503, 10.8792825]
+            t_labels = ['Stub', 'Start', 'C', 'B', 'GA', 'FA']
+            max_prob = -1
+            prev_prob = 0
+            html_ord_label = None
+            for i, t in enumerate(thresholds):
+                logit = t - html_ord_score
+                odds = math.e ** (logit)
+                cum_prob = odds / (1 + odds)
+                lab_prob = cum_prob - prev_prob
+                if lab_prob > max_prob:
+                    max_prob = lab_prob
+                    html_ord_label = t_labels[i]
+                prev_prob = cum_prob
+            if 1 - cum_prob > max_prob:
+                html_ord_label = "FA"
+
+            html_ord_score = 11.009 - html_ord_score
+            html_ord_score = 1 - math.log(html_ord_score, 10.9541)
+
+            return (html_rr_score, html_rr_label, html_ord_score, html_ord_label)
+
+    return (None, None, None, None)
+    
+
+
+def get_lin_prob(r, params):
+    lin_prob = 0
+    for var, coef in params.items():
+        if var.endswith("_x"):
+            lin_prob += coef * r[var]
+    return lin_prob
+
+
+def load_html_norm_vals():
+    HTML_MIN_MAX_MED = 2
+    HTML_MIN_MAX_CAT = 5
+    HTML_MIN_MAX_LEN = 45 # changed from 100 to 45
+    HTML_MIN_MAX_HEA = 0.1
+    HTML_MIN_MAX_REF = 0.2  # changed from 0.15 to 0.2
+    HTML_MIN_MAX_LIN = 0.45  # changed from 0.1 to 0.45
+    HTML_MIN_MAX_UNIQUE_SOURCES = 5  #added sources
+    maxval_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/quality/V4-HTML/max-vals-html-dumps-ar-en-fr-hu-tr-zh.tsv'
+    mqf_fn = os.path.join(__dir__, 'html-quality-maxvals-by-wiki.tsv.gz')
+    if not os.path.exists(mqf_fn):
+        urlretrieve(maxval_url, mqf_fn)    
+    expected_header = ['wiki_db', 'num_pages', 'max_length', 'max_media', 'max_cats', 'max_refs', 'max_headings', 'max_links','max_srcs','infobox','mbox']
+    wiki_idx = expected_header.index('wiki_db')
+    len_idx = expected_header.index('max_length')
+    hea_idx = expected_header.index('max_headings')
+    ref_idx = expected_header.index('max_refs')
+    med_idx = expected_header.index('max_media')
+    cat_idx = expected_header.index('max_cats')
+    lin_idx = expected_header.index('max_links')
+    src_idx = expected_header.index('max_srcs')
+    # inf_idx = expected_header.index('infobox')
+    # mbo_idx = expected_header.index('mbox')
+    with open(mqf_fn, 'rt') as fin:
+        header = next(fin).strip().split('\t')
+        assert header == expected_header
+        for line in fin:
+            line = line.strip().split('\t')
+            wiki = line[wiki_idx]
+            lang = wiki.replace('wiki', '')
+            page_length = float(line[len_idx])
+            headings = float(line[hea_idx])
+            refs = float(line[ref_idx])
+            media = float(line[med_idx])
+            cats = float(line[cat_idx])
+            links = float(line[lin_idx])
+            sources = float(line[src_idx])
+            HTML_MAX_QUAL_VALS[lang] = {'l':max(HTML_MIN_MAX_LEN, page_length),
+                                        'm':max(HTML_MIN_MAX_MED, media),
+                                        'r':max(HTML_MIN_MAX_REF, refs),
+                                        'h':max(HTML_MIN_MAX_HEA, headings),
+                                        'c':max(HTML_MIN_MAX_CAT, cats),
+                                        'w':max(HTML_MIN_MAX_LIN, links),
+                                        's':max(HTML_MIN_MAX_UNIQUE_SOURCES, sources)}
+
+
+def get_article_html(lang, revid):
+    """Get an article revision's HTML."""
+    base_url = f"https://{lang}.wikipedia.org/w/rest.php/v1/revision/{revid}/html" # returns the html contents
+    try:
+        response = requests.get(base_url, headers={'User-Agent': app.config['CUSTOM_UA']})
+        return response.text
+    except Exception:
+        print("failed to fetch html")
+        return None
+
+def html_to_plaintext(article):
+    """Convert Parsoid HTML to reasonable plaintext."""
+    exclude_transcluded_paragraphs = True
+    exclude_elements = {"Category", "Citation", "Comment", "Heading", 
+                        "Infobox", "Math",
+                        "Media-audio", "Media-img", "Media-video",
+                        "Messagebox", "Navigational", "Note", "Reference",
+                        "TF-sup",  # superscript -- catches Citation-needed tags etc.
+                        "Table", "Wikitable"}
+    exclude_para_context = {"pre-first-para", "between-paras", "post-last-para"}
+
+    paragraphs = [paragraph.strip()
+                  for heading, paragraph
+                  in article.wikistew.get_plaintext(
+                      exclude_transcluded_paragraphs=exclude_transcluded_paragraphs,
+                      exclude_para_context=exclude_para_context,
+                      exclude_elements=exclude_elements
+                  )]
+    
+    return '\n'.join(paragraphs) if paragraphs else None
+
+
+def get_article_features(article_html):
+    try: 
+        article = Article(article_html)
+    except TypeError:
+        print(f"Skipping article due to TypeError: {article_html}")
+        return 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+    plaintext = html_to_plaintext(article)
+    page_length = len(plaintext) if plaintext else 0
+    refs = len(article.wikistew.get_citations())
+    wikilinks_objects = [w for w in article.wikistew.get_wikilinks() if not is_transcluded(w.html_tag)] 
+    wikilinks = len([1 for w in wikilinks_objects if not w.link.endswith("redlink=1")])
+    categories = len([1 for c in article.wikistew.get_categories() if not is_transcluded(c.html_tag)])
+    max_icon_pixel_area = 100*100 # 10000 pixels
+    article_images = [image for image in article.wikistew.get_images() if image.height * image.width > max_icon_pixel_area]
+    article_videos = [video for video in article.wikistew.get_video()]
+    article_audio = [audio for audio in article.wikistew.get_audio()]
+    media = len(article_images) + len(article_videos) + len(article_audio)
+    headings = len([h for h in article.wikistew.get_headings() if h.level <= 3])
+    sources = len(article.wikistew.get_references())
+    infoboxes =  True if len(article.wikistew.get_infobox()) >= 1 else False
+    messageboxes = True if len(article.wikistew.get_message_boxes()) >= 1 else False
+    
+    return [page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes]
+    
+    
+
+
+def normalize_features(lang, page_length, num_refs, num_wikilinks, num_cats, num_media, num_headings, num_sources, num_infoboxes, num_messageboxes):
+    """Convert raw count features into values between 0 and 1.
+
+    Possible transformations:
+    * square root: make initial gains in feature of more importance to model
+                   e.g., going from 0 -> 16 wikilinks is the same as 16 -> 64
+    * divide by page length: convert absolutes to an expectation per byte of content
+                             e.g., total references -> references per paragraph
+    """
+    normed_page_length = math.sqrt(page_length)
+    length_x = min(1, normed_page_length / HTML_MAX_QUAL_VALS[lang]['l'])
+    refs_x = min(1, (num_refs / normed_page_length) / HTML_MAX_QUAL_VALS[lang]['r'])
+    wikilinks_x = min(1, (num_wikilinks / normed_page_length) / HTML_MAX_QUAL_VALS[lang]['w']) # The squareRoot dropped
+    categories_x = min(1, num_cats / HTML_MAX_QUAL_VALS[lang]['c'])
+    media_x = min(1, num_media / HTML_MAX_QUAL_VALS[lang]['m'])
+    headings_x = min(1, (num_headings / normed_page_length) / HTML_MAX_QUAL_VALS[lang]['h'])
+    sources_x = min(1, num_sources / HTML_MAX_QUAL_VALS[lang]['s'])
+    infoboxes_x = num_infoboxes
+    messageboxes_x = num_messageboxes
+
+    return length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x , sources_x , infoboxes_x, messageboxes_x
+
+load_html_norm_vals()
 load_quality_maxvals()
 application = app
 
