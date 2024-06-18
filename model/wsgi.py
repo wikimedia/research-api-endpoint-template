@@ -22,6 +22,7 @@ def deprecated(u_path):
     deprecation_message = ("GapFinder has been deprecated. "
                            "Background: https://phabricator.wikimedia.org/T367549. "
                            "For the API, please use the LiftWing endpoint. "
+                           "Documentation: https://api.wikimedia.org/wiki/Lift_Wing_API/Reference/Get_content_translation_recommendation. "
                            "Example migration: https://es.wikipedia.org/w/index.php?title=MediaWiki:Gadget-WikiProject.js&diff=prev&oldid=160820835. "
                            "For the UI, please use Content Translation: "
                            "https://www.mediawiki.org/wiki/Content_translation#Try_the_tool")
