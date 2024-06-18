@@ -825,7 +825,7 @@ def get_html_predictions(lang, revid):
         page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes = get_article_features(article_html)
         if page_length > 0:
             length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x, sources_x, infoboxes_x, messageboxes_x = normalize_features(lang, page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes)
-            html_rr_score = (0.594 * length_x) + (0.193 * refs_x) + (0.107 * wikilinks_x) + (0.093 * categories_x) + (-0.013 * media_x) + (-0.039 * headings_x) + (0.105 * sources_x) + (0.007 * infoboxes_x) + (-0.046 * messageboxes_x)
+            html_rr_score = (0.705 * length_x) + (0.150 * refs_x) + (0.079 * wikilinks_x) + (-0.027 * categories_x) + (0.109 * media_x) + (0.077 * headings_x) + (-0.073 * sources_x) + (0.085 * infoboxes_x) + (-0.104 * messageboxes_x)
             html_rr_score = max(min(html_rr_score, 1), 0)
             html_rr_label = qual_score_to_class(html_rr_score)
             html_ord_score = (6.309 * length_x) + (1.198 * refs_x) + (0.647 * wikilinks_x) + (0.113 * categories_x) + (0.932 * media_x) + (0.292 * headings_x) + (0.174 * sources_x) + (0.344 * infoboxes_x) + (-0.946 * messageboxes_x)
