@@ -60,6 +60,19 @@ def get_item_scores():
         return jsonify(result)
 
 
+@app.route('/api/recoinish/<prop>/<value>', methods=['GET'])
+def recoinish(prop, value):
+    """Created mainly for debugging purposes."""
+    try:
+        result = []
+        for claim, freq in sorted(TOP_PROPS.get(f"{prop}:{value}", []), key=lambda x: x[1], reverse=True):
+            result.append({'property':claim,
+                           'proportion-exists':freq,
+                           'proportion-referenced':PROPERTY_REF_PROPS.get(claim)})
+        return jsonify(result)
+    except Exception:
+        return jsonify({'error':'something failed -- try /api/recoinish/P31/Q4167410 for instance-of: disambiguation page'})
+
 
 def get_reference_type(references):
     """Map references for a claim to different categories.
@@ -204,26 +217,24 @@ def assess_claims(item):
 
     instance_ofs = []
     # build list of instance-of / occupation properties to use for computing expectation
-    # if item.get('claims'):
-    # print(f'\nclaims: {item["claims"].keys()}')
-    # else:
-    # print('\nclaims (no existing)')
     if item['claims']:
         for claim in item['claims'].get('P31', []):  # instance-of property
             try:
-                instance_ofs.append(claim['mainsnak']['datavalue']['value']['id'])
+                instance_ofs.append(f"P31:{claim['mainsnak']['datavalue']['value']['id']}")
             except KeyError:
                 continue
         for claim in item['claims'].get('P106', []):  # occupations
             try:
-                instance_ofs.append(claim['mainsnak']['datavalue']['value']['id'])
+                instance_ofs.append(f"P106:{claim['mainsnak']['datavalue']['value']['id']}")
             except KeyError:
                 continue
+        if not instance_ofs and item['claims'].get('P279'):
+            instance_ofs.append(f"P279:true")
 
     # print('ids:', instance_ofs)
     # no instance-of or uncommon instance-of
     # in the latter instance, not exactly fair to assume it's missing an instance-of property
-    # but also assuming it's complete feels incorrect so this strikes a balance.
+    # but also assuming it's complete feels incorrect so this strikes a balance.    
     if not instance_ofs:
         claim_backlog = 1  # missing instance-of
         missing_claim_ref_backlog = PROPERTY_REF_PROPS.get('P31', 0)
@@ -237,16 +248,10 @@ def assess_claims(item):
         # eventually might want to weight by frequency as Recoin does (or order?)
         norm_factor = 1 / len(instance_ofs)
         for iof in instance_ofs:
-            if iof in TOP_PROPS:
-                top_props = TOP_PROPS[iof]
-            else:
-                top_props = get_top_properties(iof)
-                TOP_PROPS[iof] = top_props
-            for expected_prop, ep_likelihood in top_props:
+            for expected_prop, ep_likelihood in TOP_PROPS.get(iof, []):
                 # must occur in at least 1% of items and not already be present
-                # ep_likelihood is a percentage not proportion (0-100] not (0-1]
-                if ep_likelihood >= 1:
-                    claim_expectation = norm_factor * (ep_likelihood / 100)
+                if ep_likelihood >= 0.01:
+                    claim_expectation = norm_factor * ep_likelihood
                     if expected_prop in item['claims']:
                         num_existing_claims += claim_expectation
                         # print('\tfound:', expected_prop, ep_likelihood, num_existing_claims)
@@ -317,20 +322,6 @@ def assess_item(item):
 
     return label_desc_score, claim_score, ref_score, len(item.get('claims', []))
 
-def get_top_properties(qid):
-    """Get top properties for a given instance-of or occupation."""
-
-    # https://recoin.toolforge.org/getbyclassid.php?subject=Q185351&n=200
-    recoin_url = f"https://recoin.toolforge.org/getbyclassid.php"
-    params = {'subject': qid, 'n': 200}
-    response = requests.get(recoin_url, params=params, headers={'User-Agent': 'isaacj@wikimedia.org; PAWS'})
-    result = response.json()
-
-    try:
-        return [(p['Property ID'], float(p['Frequency'])) for p in result['Frequenct_properties']]
-    except Exception:
-        return []
-
 
 def get_qid(title, lang, session=None):
     """Get Wikidata item ID for a given Wikipedia article"""
@@ -386,8 +377,9 @@ def load_data():
     global EXTERNAL_ID_PROPERTIES
     global COMPLETENESS_MODEL
     global QUALITY_MODEL
+    global TOP_PROPS
 
-    with gzip.open('/etc/api-endpoint/resources/ref_props.tsv.gz', 'rt') as fin:
+    with gzip.open(os.path.join(__dir__, 'resources/ref_props.tsv.gz'), 'rt') as fin:
         assert next(fin).strip().split('\t') == ['property', 'num_claims', 'prop_referenced']
         for line in fin:
             property_id, _, prop_referenced = line.strip().split('\t')
@@ -395,21 +387,45 @@ def load_data():
 
     logging.info(f'{len(PROPERTY_REF_PROPS)} properties with reference expectations.')
     logging.info(f'e.g., P21 (sex or gender) is referenced {100 * PROPERTY_REF_PROPS["P21"]}% of the time.')
-
-    with open('/etc/api-endpoint/resources/external_ids.tsv', 'r') as fin:
+    
+    with open(os.path.join(__dir__, 'resources/external_ids.tsv'), 'r') as fin:
         assert next(fin).strip() == 'pi_property_id'
         for line in fin:
             EXTERNAL_ID_PROPERTIES.add(f'P{line.strip()}')
 
     logging.info(f'{len(EXTERNAL_ID_PROPERTIES)} external IDs loaded in.')
     logging.info(f'e.g., {"; ".join(list(EXTERNAL_ID_PROPERTIES)[:5])}; ...')
+    
+    with gzip.open(os.path.join(__dir__, 'resources/property-stats.tsv.gz'), 'rt') as fin:
+        expected_header = ['classifier', 'value', 'property', 'num_occurrences', 'proportion']
+        c_idx = expected_header.index('classifier')
+        v_idx = expected_header.index('value')
+        p_idx = expected_header.index('property')
+        o_idx = expected_header.index('num_occurrences')
+        f_idx = expected_header.index('proportion')
+        assert next(fin).strip().split('\t') == expected_header
+        for line in fin:
+            line = line.strip().split('\t')
+            if int(line[o_idx]) >= 2:
+                key = f'{line[c_idx]}:{line[v_idx]}'
+                prop = line[p_idx]
+                freq = float(line[f_idx])
+                if key not in TOP_PROPS:
+                    TOP_PROPS[key] = []
+                TOP_PROPS[key].append((prop, freq))
 
-    QUALITY_MODEL = api.load('/etc/api-endpoint/resources/wikidata-quality-model.pkl')
+        for classifier in TOP_PROPS:
+            TOP_PROPS[classifier] = sorted(TOP_PROPS[classifier], key=lambda x: x[1], reverse=True)
+
+    logging.info(f'{len(TOP_PROPS)} classifiers with claims expectations.')
+    logging.info(f'e.g., top-five properties for physicist occupation: {"; ".join([f"{p}-{f:.3f}" for p,f in TOP_PROPS["P106:Q169470"][:5]])}; ...')
+    
+    QUALITY_MODEL = api.load(os.path.join(__dir__, 'resources/wikidata-quality-model.pkl'))
     logging.info(f'Quality model:\n{QUALITY_MODEL.summary()}')
-
-    COMPLETENESS_MODEL = api.load('/etc/api-endpoint/resources/wikidata-completeness-model.pkl')
+    
+    COMPLETENESS_MODEL = api.load(os.path.join(__dir__, 'resources/wikidata-completeness-model.pkl'))
     logging.info(f'Completeness model:\n{COMPLETENESS_MODEL.summary()}')
-
+    
 
 load_data()
 

@@ -2,5 +2,6 @@ Flask
 Flask-Cors
 mwapi
 mwconstants
+pandas<2.0.0
 PyYAML
 statsmodels

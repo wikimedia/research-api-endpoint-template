@@ -9,8 +9,9 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 # alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
 GIT_BRANCH='wikidata-quality'
-REF_DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-property-prop-reffed.tsv.gz'
-EXT_ID_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/quarry-69919-wikidata-external-ids-run692643.tsv'
+REF_DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-property-prop-reffed-2024-06-03.tsv.gz'
+EXT_ID_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/quarry-69919-wikidata-external-ids-run876916.tsv'
+PROP_DATA_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-property-stats-2024-06-03.tsv.gz'
 QUAL_MOD_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-quality-model.pkl'
 COMP_MOD_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/wikidata/wikidata-completeness-model.pkl'
 
@@ -57,6 +58,7 @@ pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 echo "Downloading data, hang on..."
 wget -O ${ETC_PATH}/resources/ref_props.tsv.gz ${REF_DATA_WGET}
 wget -O ${ETC_PATH}/resources/external_ids.tsv ${EXT_ID_WGET}
+wget -O ${ETC_PATH}/resources/property-stats.tsv.gz ${PROP_DATA_WGET}
 wget -O ${ETC_PATH}/resources/wikidata-quality-model.pkl ${QUAL_MOD_WGET}
 wget -O ${ETC_PATH}/resources/wikidata-completeness-model.pkl ${COMP_MOD_WGET}
 
