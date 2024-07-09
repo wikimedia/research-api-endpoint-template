@@ -1,4 +1,3 @@
-annoy
 fasttext
 Flask
 Flask-Cors
