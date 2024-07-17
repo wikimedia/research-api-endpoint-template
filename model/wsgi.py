@@ -36,6 +36,7 @@ COUNTRY_PROPERTIES = {
     "P1269": "facet of",
     "P1532": "country for sport",
     "P3842": "located in present-day administrative territorial entity",
+    "P9714": "taxon range",
     }
 db_fn = os.path.join(__dir__, 'country_groundtruth.sqlite')
 if os.path.exists(db_fn):
