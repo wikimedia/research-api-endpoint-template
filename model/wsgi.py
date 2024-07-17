@@ -595,11 +595,21 @@ def quality_revid_compare():
     if error:
         return jsonify({'error': error})
     wikitext_quality, _ = get_quality(lang, revid=revid)
-    html_rr_score, html_rr_label, html_ord_score, html_ord_label = get_html_predictions(lang, revid)
+    html_ord_score, html_ord_label, _ = get_html_predictions(lang, revid)
     return jsonify({'lang': lang, 'revid': revid,
                     'quality-wikitext': wikitext_quality, 'class-wikitext': qual_score_to_class(wikitext_quality),
-                    'quality-html-linear': html_rr_score, 'class-html-linear': html_rr_label,
                     'quality-html-ordinal': html_ord_score, 'class-html-ordinal': html_ord_label
+                    })
+
+@app.route('/api/v1/quality-revid-html', methods=['GET'])
+def quality_revid_html():
+    lang, revid, error = validate_revid_api_args()
+    if error:
+        return jsonify({'error': error})
+    html_ord_score, html_ord_label, features = get_html_predictions(lang, revid)
+    return jsonify({'lang': lang, 'revid': revid,
+                    'quality-score': html_ord_score, 'quality-class': html_ord_label,
+                    'features': features
                     })
 
 @app.route('/api/v1/quality-article-features', methods=['GET'])
@@ -825,9 +835,6 @@ def get_html_predictions(lang, revid):
         page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes = get_article_features(article_html)
         if page_length > 0:
             length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x, sources_x, infoboxes_x, messageboxes_x = normalize_features(lang, page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes)
-            html_rr_score = (0.705 * length_x) + (0.150 * refs_x) + (0.079 * wikilinks_x) + (-0.027 * categories_x) + (0.109 * media_x) + (0.077 * headings_x) + (-0.073 * sources_x) + (0.085 * infoboxes_x) + (-0.104 * messageboxes_x)
-            html_rr_score = max(min(html_rr_score, 1), 0)
-            html_rr_label = qual_score_to_class(html_rr_score)
             html_ord_score = (6.309 * length_x) + (1.198 * refs_x) + (0.647 * wikilinks_x) + (0.113 * categories_x) + (0.932 * media_x) + (0.292 * headings_x) + (0.174 * sources_x) + (0.344 * infoboxes_x) + (-0.946 * messageboxes_x)
             thresholds = [4.27085935, 7.10500962, 8.64130528, 9.70745503, 10.8792825]
             t_labels = ['Stub', 'Start', 'C', 'B', 'GA', 'FA']
@@ -844,14 +851,26 @@ def get_html_predictions(lang, revid):
                     html_ord_label = t_labels[i]
                 prev_prob = cum_prob
             if 1 - cum_prob > max_prob:
-                html_ord_label = "FA"
+                html_ord_label = t_labels[-1]  # FA
 
             html_ord_score = 11.009 - html_ord_score
             html_ord_score = 1 - math.log(html_ord_score, 10.9541)
 
-            return (html_rr_score, html_rr_label, html_ord_score, html_ord_label)
+            features = {
+                'raw':{
+                    'length (bytes)':page_length, 'references':refs, 'wikilinks':wikilinks,
+                    'categories':categories, 'media':media, 'headings':headings,
+                    'sources':sources, 'infoboxes':infoboxes, 'messageboxes':messageboxes
+                       },
+                'normalized':{
+                    'length (bytes)':length_x, 'references':refs_x, 'wikilinks':wikilinks_x,
+                    'categories':categories_x, 'media':media_x, 'headings':headings_x,
+                    'sources':sources_x, 'infoboxes':infoboxes_x, 'messageboxes':messageboxes_x
+                    }
+                }
+            return (html_ord_score, html_ord_label, features)
 
-    return (None, None, None, None)
+    return (None, None, None)
     
 
 
@@ -870,8 +889,8 @@ def load_html_norm_vals():
     HTML_MIN_MAX_HEA = 0.1
     HTML_MIN_MAX_REF = 0.2  # changed from 0.15 to 0.2
     HTML_MIN_MAX_LIN = 0.45  # changed from 0.1 to 0.45
-    HTML_MIN_MAX_UNIQUE_SOURCES = 5  #added sources
-    maxval_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/quality/V4-HTML/max-vals-html-dumps-ar-en-fr-hu-tr-zh.tsv'
+    HTML_MIN_MAX_UNIQUE_SOURCES = 5  # added sources
+    maxval_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/quality/V4-HTML/html-features-all-wikis-2024-07-01.tsv'
     mqf_fn = os.path.join(__dir__, 'html-quality-maxvals-by-wiki.tsv.gz')
     if not os.path.exists(mqf_fn):
         urlretrieve(maxval_url, mqf_fn)    
@@ -884,8 +903,6 @@ def load_html_norm_vals():
     cat_idx = expected_header.index('max_cats')
     lin_idx = expected_header.index('max_links')
     src_idx = expected_header.index('max_srcs')
-    # inf_idx = expected_header.index('infobox')
-    # mbo_idx = expected_header.index('mbox')
     with open(mqf_fn, 'rt') as fin:
         header = next(fin).strip().split('\t')
         assert header == expected_header
@@ -951,25 +968,24 @@ def get_article_features(article_html):
     plaintext = html_to_plaintext(article)
     page_length = len(plaintext) if plaintext else 0
     refs = len(article.wikistew.get_citations())
-    wikilinks_objects = [w for w in article.wikistew.get_wikilinks() if not is_transcluded(w.html_tag)] 
-    wikilinks = len([1 for w in wikilinks_objects if not w.link.endswith("redlink=1")])
+    wikilinks = len([w for w in article.wikistew.get_wikilinks() if not is_transcluded(w.html_tag) and not w.redlink])
     categories = len([1 for c in article.wikistew.get_categories() if not is_transcluded(c.html_tag)])
     max_icon_pixel_area = 100*100 # 10000 pixels
-    article_images = [image for image in article.wikistew.get_images() if image.height * image.width > max_icon_pixel_area]
-    article_videos = [video for video in article.wikistew.get_video()]
-    article_audio = [audio for audio in article.wikistew.get_audio()]
-    media = len(article_images) + len(article_videos) + len(article_audio)
+    num_images = len([image for image in article.wikistew.get_images() if image.height * image.width > max_icon_pixel_area])
+    num_videos = len([video for video in article.wikistew.get_video()])
+    num_audio = len([audio for audio in article.wikistew.get_audio()])
+    media = num_images + num_videos + num_audio
     headings = len([h for h in article.wikistew.get_headings() if h.level <= 3])
     sources = len(article.wikistew.get_references())
-    infoboxes =  True if len(article.wikistew.get_infobox()) >= 1 else False
-    messageboxes = True if len(article.wikistew.get_message_boxes()) >= 1 else False
+    has_infobox =  len(article.wikistew.get_infobox()) >= 1
+    has_messagebox = len(article.wikistew.get_message_boxes()) >= 1
     
-    return [page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes]
+    return [page_length, refs, wikilinks, categories, media, headings, sources, has_infobox, has_messagebox]
     
     
 
 
-def normalize_features(lang, page_length, num_refs, num_wikilinks, num_cats, num_media, num_headings, num_sources, num_infoboxes, num_messageboxes):
+def normalize_features(lang, page_length, num_refs, num_wikilinks, num_cats, num_media, num_headings, num_sources, has_infobox, has_messagebox):
     """Convert raw count features into values between 0 and 1.
 
     Possible transformations:
@@ -981,13 +997,13 @@ def normalize_features(lang, page_length, num_refs, num_wikilinks, num_cats, num
     normed_page_length = math.sqrt(page_length)
     length_x = min(1, normed_page_length / HTML_MAX_QUAL_VALS[lang]['l'])
     refs_x = min(1, (num_refs / normed_page_length) / HTML_MAX_QUAL_VALS[lang]['r'])
-    wikilinks_x = min(1, (num_wikilinks / normed_page_length) / HTML_MAX_QUAL_VALS[lang]['w']) # The squareRoot dropped
+    wikilinks_x = min(1, (num_wikilinks / normed_page_length) / HTML_MAX_QUAL_VALS[lang]['w'])
     categories_x = min(1, num_cats / HTML_MAX_QUAL_VALS[lang]['c'])
     media_x = min(1, num_media / HTML_MAX_QUAL_VALS[lang]['m'])
     headings_x = min(1, (num_headings / normed_page_length) / HTML_MAX_QUAL_VALS[lang]['h'])
     sources_x = min(1, num_sources / HTML_MAX_QUAL_VALS[lang]['s'])
-    infoboxes_x = num_infoboxes
-    messageboxes_x = num_messageboxes
+    infoboxes_x = has_infobox
+    messageboxes_x = has_messagebox
 
     return length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x , sources_x , infoboxes_x, messageboxes_x
 
