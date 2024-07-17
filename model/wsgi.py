@@ -891,7 +891,7 @@ def load_html_norm_vals():
     HTML_MIN_MAX_LIN = 0.45  # changed from 0.1 to 0.45
     HTML_MIN_MAX_UNIQUE_SOURCES = 5  # added sources
     maxval_url = 'https://analytics.wikimedia.org/published/datasets/one-off/isaacj/quality/V4-HTML/html-features-all-wikis-2024-07-01.tsv'
-    mqf_fn = os.path.join(__dir__, 'html-quality-maxvals-by-wiki.tsv.gz')
+    mqf_fn = os.path.join(__dir__, 'html-quality-maxvals-by-wiki.tsv')
     if not os.path.exists(mqf_fn):
         urlretrieve(maxval_url, mqf_fn)    
     expected_header = ['wiki_db', 'num_pages', 'max_length', 'max_media', 'max_cats', 'max_refs', 'max_headings', 'max_links','max_srcs','infobox','mbox']
