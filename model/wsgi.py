@@ -1,3 +1,4 @@
+import gzip
 import json
 import os
 import re
@@ -38,6 +39,7 @@ COUNTRY_PROPERTIES = {
     "P3842": "located in present-day administrative territorial entity",
     "P9714": "taxon range",
     }
+CATEGORY_TO_COUNTRY = {}
 db_fn = os.path.join(__dir__, 'country_groundtruth.sqlite')
 if os.path.exists(db_fn):
     GROUNDTRUTH = SqliteDict(db_fn, autocommit=False)
@@ -316,29 +318,38 @@ def get_regions():
             details.append({"P625": "coordinate location", "country": coord_country})
             countries.add(coord_country)
         result["details"] = details
-        if title and lang and GROUNDTRUTH:
-            link_countries = title_to_links(title=title, lang=lang)
-            link_results = []
-            links_analyzed = sum(link_countries.values())
-            tfidf_sum = 0
-            for c in sorted(link_countries, key=link_countries.get, reverse=True):
-                prop_tfidf = (link_countries[c] / links_analyzed) * IDF[c]
-                tfidf_sum +=  prop_tfidf
-                if c:
-                    link_results.append({"country": c,
-                                         "count": link_countries[c],
-                                         "prop-tfidf": prop_tfidf
-                                         })
-            for r in link_results:
-                normalized_tfidf = r["prop-tfidf"] / tfidf_sum
-                r["prop-tfidf"] = normalized_tfidf
-                # arbitrary thresholds -- 0.25 specifically is an effort to avoid
-                # UK/US being inferred for every plant species because many of
-                # the identifiers in the taxonbar are orgs based in US/UK
-                # and come in around 0.20 w/o many other links in the article.
-                if normalized_tfidf >= 0.25 and r["count"] >= 3:
-                    countries.add(r["country"])
-            result["links"] = link_results
+        # a few additional checks when specific Wikipedia articles provided
+        if title and lang:
+            if GROUNDTRUTH:
+                link_countries = title_to_links(title=title, lang=lang)
+                link_results = []
+                links_analyzed = sum(link_countries.values())
+                tfidf_sum = 0
+                for c in sorted(link_countries, key=link_countries.get, reverse=True):
+                    prop_tfidf = (link_countries[c] / links_analyzed) * IDF[c]
+                    tfidf_sum +=  prop_tfidf
+                    if c:
+                        link_results.append({"country": c,
+                                            "count": link_countries[c],
+                                            "prop-tfidf": prop_tfidf
+                                            })
+                for r in link_results:
+                    normalized_tfidf = r["prop-tfidf"] / tfidf_sum
+                    r["prop-tfidf"] = normalized_tfidf
+                    # arbitrary thresholds -- 0.25 specifically is an effort to avoid
+                    # UK/US being inferred for every plant species because many of
+                    # the identifiers in the taxonbar are orgs based in US/UK
+                    # and come in around 0.20 w/o many other links in the article.
+                    if normalized_tfidf >= 0.25 and r["count"] >= 3:
+                        countries.add(r["country"])
+                result["links"] = link_results
+            if CATEGORY_TO_COUNTRY:
+                result["categories"] = []
+                category_countries = title_to_categories(title=title, lang=lang)
+                for country in category_countries:
+                    countries.add(country)
+                    result["categories"].append({"country": country,
+                                                 "categories":"|".join(category_countries[country])})
         result["countries"] = sorted(list(countries))
         return jsonify(result)
 
@@ -478,13 +489,39 @@ def title_to_links(title, lang, limit=500):
                     if link_countries:
                         for c in link_countries:
                             country_counts[c] = country_counts.get(c, 0) + 1
-                            print(link["title"], c)
                     else:
                         country_counts[''] = country_counts.get('', 0) + 1
                     
         if processed >= limit:
             break
     return country_counts
+
+
+def title_to_categories(title, lang):
+    """Gather categories for an article and check if any map to countries"""
+    session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
+
+    # generate list of all categories for the article and their associated Wikidata IDs
+    # https://en.wikipedia.org/w/api.php?action=query&generator=categories&titles=Japanese_iris&prop=pageprops&format=json&ppprop=wikibase_item&gcllimit=max
+    result = session.get(
+        action="query",
+        generator="categories",
+        titles=title,
+        redirects='',
+        prop='pageprops',
+        ppprop='wikibase_item',
+        gcllimit="max",
+        format='json',
+        formatversion=2,
+    )
+    countries = {}
+    for category in result.get("query", {}).get("pages", []):
+        category_qid = category.get("pageprops", {}).get("wikibase_item")
+        if category_qid and category_qid in CATEGORY_TO_COUNTRY:
+            country = CATEGORY_TO_COUNTRY[category_qid]
+            category_name = category.get("title")
+            countries[country] = countries.get(country, []) + [category_name]
+    return countries
 
 
 def get_groundtruth(qid):
@@ -568,6 +605,27 @@ def load_region_data():
             if not alt_found:
                 print(f"Missing geometry: {QID_TO_REGION[qid]} ({qid})")
 
+
+    # load in categories that map to countries (per Wikidata)
+    categories_tsv = os.path.join(__dir__, "category-countries.tsv.gz")
+    if not os.path.exists(categories_tsv):
+        categories_url = "https://analytics.wikimedia.org/published/datasets/one-off/isaacj/geography/category-countries.tsv.gz"
+        response = requests.get(categories_url)
+        with open(categories_tsv, mode="wb") as fout:
+            fout.write(response.content)
+
+    with gzip.open(categories_tsv, 'rt') as fin:
+        categories_header = ["category_qid", "country_name"]
+        valid_countries = set(QID_TO_REGION.values())
+        assert next(fin).strip().split("\t") == categories_header
+        for line in fin:
+            qid, country = line.strip().split("\t")
+            if not validate_qid(qid):
+                print(f"Malformed category QID: {line}")
+            elif country not in valid_countries:
+                print(f"Invalid category country: <{country}>")
+            else:
+                CATEGORY_TO_COUNTRY[qid] = country
 
 application = app
 load_region_data()
