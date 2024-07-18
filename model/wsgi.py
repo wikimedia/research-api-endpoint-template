@@ -307,7 +307,7 @@ def get_regions():
     if error is not None:
         return jsonify({'Error': error})
     else:
-        result = {"qid": qid, "countries":[], "details":[]}
+        result = {"qid": qid, "countries":[], "wikidata":[]}
         countries = set()
         details = []
         for property, p_country in get_cultural_regions(claims):
@@ -317,7 +317,7 @@ def get_regions():
         if coord_country:
             details.append({"P625": "coordinate location", "country": coord_country})
             countries.add(coord_country)
-        result["details"] = details
+        result["wikidata"] = details
         # a few additional checks when specific Wikipedia articles provided
         if title and lang:
             if GROUNDTRUTH:
