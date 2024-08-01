@@ -835,8 +835,8 @@ def get_html_predictions(lang, revid):
         page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes = get_article_features(article_html)
         if page_length > 0:
             length_x, refs_x, wikilinks_x, categories_x, media_x, headings_x, sources_x, infoboxes_x, messageboxes_x = normalize_features(lang, page_length, refs, wikilinks, categories, media, headings, sources, infoboxes, messageboxes)
-            html_ord_score = (6.309 * length_x) + (1.198 * refs_x) + (0.647 * wikilinks_x) + (0.113 * categories_x) + (0.932 * media_x) + (0.292 * headings_x) + (0.174 * sources_x) + (0.344 * infoboxes_x) + (-0.946 * messageboxes_x)
-            thresholds = [4.27085935, 7.10500962, 8.64130528, 9.70745503, 10.8792825]
+            html_ord_score = (6.279141 * length_x) + (1.162669 * refs_x) + (0.696006 * wikilinks_x) + (0.082483 * categories_x) + (0.816600 * media_x) + (0.231126 * headings_x) + (0.236004 * sources_x) + (0.386889 * infoboxes_x) + (-0.947278 * messageboxes_x)
+            thresholds = [4.239930, 7.02916399, 8.5647493, 9.62894343, 10.79133557]
             t_labels = ['Stub', 'Start', 'C', 'B', 'GA', 'FA']
             max_prob = -1
             prev_prob = 0
@@ -853,8 +853,8 @@ def get_html_predictions(lang, revid):
             if 1 - cum_prob > max_prob:
                 html_ord_label = t_labels[-1]  # FA
 
-            html_ord_score = 11.009 - html_ord_score
-            html_ord_score = 1 - math.log(html_ord_score, 10.9541)
+            html_ord_score = 10.890916590223638 - html_ord_score
+            html_ord_score = 1 - math.log(html_ord_score, 10.838194515504279)
 
             features = {
                 'raw':{
