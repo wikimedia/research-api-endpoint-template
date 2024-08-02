@@ -854,7 +854,7 @@ def get_html_predictions(lang, revid):
                 html_ord_label = t_labels[-1]  # FA
 
             html_ord_score = 10.890916590223638 - html_ord_score
-            html_ord_score = 1 - math.log(html_ord_score, 10.838194515504279)
+            html_ord_score = 1 - math.log(html_ord_score, 11.838194515504279)
 
             features = {
                 'raw':{
