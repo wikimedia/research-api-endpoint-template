@@ -352,7 +352,7 @@ def get_regions():
                                                  "categories":"|".join(category_countries[country])})
         result["countries"] = sorted(list(countries))
         return jsonify(result)
-
+    
 
 def validate_qid(qid):
     """Make sure QID string is expected format."""
@@ -626,6 +626,47 @@ def load_region_data():
                 print(f"Invalid category country: <{country}>")
             else:
                 CATEGORY_TO_COUNTRY[qid] = country
+
+@app.route('/link-countries', methods=['GET'])
+def get_link_countries():
+    """Get region(s) for a Wikipedia article."""
+    qid, title, lang, _, error = get_item()
+    if error is not None:
+        return jsonify({'Error': error})
+    else:
+        output = {"qid": qid, "title":title, "lang":lang}
+        # a few additional checks when specific Wikipedia articles provided
+        if title and lang:
+            if GROUNDTRUTH:
+                details = []
+                session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
+
+                # generate list of all outlinks (to namespace 0) from the article and their associated Wikidata IDs
+                result = session.get(
+                    action="query",
+                    generator="links",
+                    titles=title,
+                    redirects='',
+                    prop='pageprops',
+                    ppprop='wikibase_item',
+                    gplnamespace=0,
+                    gpllimit=50,
+                    format='json',
+                    formatversion=2,
+                    continuation=True
+                )
+                for r in result:
+                    for link in r['query']['pages']:
+                        if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
+                            qid = link.get('pageprops', {}).get('wikibase_item', None)
+                            title = link.get('title', '')
+                            if qid is not None:
+                                link_countries = get_groundtruth(qid)
+                                details.append({'link': title, 'qid': qid, 'countries': link_countries})                                
+        output["details"] = details
+        return jsonify(output)
+
+
 
 application = app
 load_region_data()
