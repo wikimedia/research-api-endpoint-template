@@ -19,8 +19,7 @@ app.config.update(yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml')
 cors = CORS(app, resources={r'*': {'origins': '*'}})
 
 # fast-text model for making predictions
-# TODO switch to model.bin
-MODEL = fasttext.load_model(os.path.join(__dir__, 'model_all-wikis-topic-v2-2024-08.bin'))
+MODEL = fasttext.load_model(os.path.join(__dir__, 'model.bin'))
 
 # male, cis man, assigned male at birth
 CIS_MALE_VALUES = {'Q6581097', 'Q15145778', 'Q25388691'}
