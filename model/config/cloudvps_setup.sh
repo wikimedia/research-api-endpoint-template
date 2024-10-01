@@ -8,8 +8,8 @@ GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  
 # model binary / data -- ndownloader.figshare is a good host
 # alternatives include analytics -- e.g., https://analytics.wikimedia.org/published/datasets/one-off/isaacj/...
 # for more details, see: https://wikitech.wikimedia.org/wiki/Analytics/Web_publication
-MODEL_WGET='...'
-GIT_BRANCH='gunicorn'
+MODEL_WGET='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/articletopic/model_all-wikis-topic-v2-2024-08.bin'
+GIT_BRANCH='topic-v2-prototype'
 
 # derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
@@ -51,10 +51,10 @@ pip install wheel
 pip install gunicorn
 pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
 
-#echo "Downloading model, hang on..."
-#cd ${TMP_PATH}
-#wget -O model.bin ${MODEL_WGET}
-#mv model.bin ${ETC_PATH}/resources
+echo "Downloading model, hang on..."
+cd ${TMP_PATH}
+wget -O model.bin ${MODEL_WGET}
+mv model.bin ${ETC_PATH}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}

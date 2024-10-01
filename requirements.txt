@@ -1,4 +1,5 @@
+fasttext
 Flask
 Flask-Cors
-mwapi
+requests
 PyYAML

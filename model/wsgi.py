@@ -1,9 +1,11 @@
 import logging
 import os
+import time
 
+import fasttext
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import mwapi
+import requests
 import yaml
 
 app = Flask(__name__)
@@ -14,61 +16,244 @@ __dir__ = os.path.dirname(__file__)
 app.config.update(yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
 
 # Enable CORS for API endpoints
-cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
+cors = CORS(app, resources={r'*': {'origins': '*'}})
 
 # fast-text model for making predictions
-EXAMPLE_MODEL = {}
+# TODO switch to model.bin
+MODEL = fasttext.load_model(os.path.join(__dir__, 'model_all-wikis-topic-v2-2024-08.bin'))
 
-@app.route('/api/v1/example', methods=['GET'])
-def article_starts_with_vowel():
+# male, cis man, assigned male at birth
+CIS_MALE_VALUES = {'Q6581097', 'Q15145778', 'Q25388691'}
+# female, cis woman, assigned female at birth
+CIS_FEMALE_VALUES = {'Q6581072', 'Q15145779', 'Q56315990'}
+# intersex, trans woman, trans man, non-binary, faʻafafine, māhū, kathoey, fakaleitī, hijra, two-spirit,
+# transmasculine, transfeminine, muxe, agender, genderqueer, genderfluid, neutrois, pangender, cogenitor,
+# neutral sex, third gender, X-gender, demiboy, demigirl, bigender, transgender, travesti, 'akava'ine
+# androgyne, yinyang ren, intersex person, boi, takatāpui, fakafifine, intersex man, intersex woman,
+# demimasc, altersex, gender agnostic, futanari, transsexual, brotherboy, sistergirl
+NONBINARY_VALUES = {'Q1097630', 'Q1052281', 'Q2449503', 'Q48270', 'Q1399232', 'Q3277905', 'Q746411', 'Q350374', 'Q660882', 'Q301702',
+                    'Q27679766', 'Q27679684', 'Q3177577', 'Q505371', 'Q12964198', 'Q18116794', 'Q1289754', 'Q7130936', 'Q64017034',
+                    'Q52261234', 'Q48279', 'Q96000630', 'Q93954933', 'Q93955709', 'Q859614', 'Q189125', 'Q17148251', 'Q4700377',
+                    'Q97595519', 'Q8053770', 'Q104717073', 'Q99519347', 'Q7677449', 'Q107427210', 'Q112597587', 'Q121307094',
+                    'Q121307100', 'Q121368243', 'Q59592239', 'Q124637723', 'Q1054122', 'Q105222132', 'Q130315012', 'Q130315001'}
+
+KINGDOMS = {'Q729': 'animal', 'Q756': 'plant', 'Q764': 'fungus'}
+
+@app.route('/article', methods=['GET'])
+def get_topic_predictions():
     """API endpoint. Takes inputs from request URL and returns JSON with outputs."""
-    lang, page_title, error = validate_api_args()
+    lang, page_title, qid, error = validate_api_args()
     if error is not None:
         return jsonify({'error': error})
     else:
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title}',
-                  'first-letter': EXAMPLE_MODEL.get(page_title[0].lower(), 'consonant')
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
+                  'item': f'https://www.wikidata.org/wiki/{qid}' if qid else None,
+                  'results':{}
                   }
-        logging.debug(result)
+        latency = {}
+        start = time.time()
+        if qid:
+            is_bio, is_taxon, is_list_disamb, gender = get_wikidata_assessments(qid)
+        else:
+            is_bio, is_taxon, is_list_disamb, gender = None, None, None, None
+        latency['base-wikidata'] = time.time() - start
+        if is_list_disamb:
+            result['results']['list/disambig'] = True
+        else:
+            start = time.time()
+            countries = get_country_predictions(lang, page_title)
+            latency['countries'] = time.time() - start
+            result['results']['countries'] = countries
+            result['results']['person'] = {'biography': is_bio}
+            if is_bio:
+                result['results']['person']['gender'] = gender
+            result['results']['species'] = {'taxon': is_taxon}
+            if is_taxon:
+                start = time.time()
+                #kingdom = leaf_to_root(qid, iter_num=0)
+                kingdom = get_kingdoms(qid)
+                if kingdom:
+                    result['results']['species']['kingdom'] = kingdom
+                latency['kingdom'] = time.time() - start
+            start = time.time()
+            topics = get_model_prediction(lang=lang, title=page_title)
+            latency['topics'] = time.time() - start
+            result['results']['topics'] = topics
+        result['latency'] = latency
         return jsonify(result)
+    
+
+def get_model_prediction(lang, title):
+    linkstr = title_to_linkstr(lang, title)
+    lbls, scores = MODEL.predict(linkstr, k=-1)
+    results = {l:s for l,s in zip(lbls, scores) if s >= 0.10}
+    sorted_res = [{'topic':l.replace("__label__", ""), 'confidence':results[l]} for l in sorted(results, key=results.get, reverse=True)]
+    return sorted_res
+    
+    
+def title_to_linkstr(lang, title):
+    """Gather set of up to 500 links as QIDs for an article."""
+    # https://en.wikipedia.org/w/api.php?action=query&generator=links&titles=Japanese_iris&prop=pageprops&format=json&ppprop=wikibase_item&gplnamespace=0&gpllimit=max&redirects&format=json&formatversion=2
+    base_url = f'https://{lang}.wikipedia.org/w/api.php'
+    params = {
+        "action": "query",
+        "generator": "links",
+        "titles": title,
+        "redirects": True,
+        "prop": "pageprops",
+        "ppprop": "wikibase_item",
+        "gplnamespace": 0,
+        "gpllimit": "max",
+        "format": "json",
+        "formatversion": 2,
+        }
+    response = requests.get(base_url, params, headers={'User-Agent': app.config['CUSTOM_UA']})
+    
+    outlink_qids = set()
+    for link in response.json().get('query', {}).get('pages', []):
+        if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
+            qid = link.get('pageprops', {}).get('wikibase_item', None)
+            if qid is not None:
+                outlink_qids.add(qid)
+
+    return ' '.join(outlink_qids)
 
 
-@app.route('/api/v1/bad-example', methods=['GET'])
-def throw_an_error():
-    """API endpoint. Takes inputs from request URL and returns JSON with outputs."""
+def get_country_predictions(lang, title):
+    # https://wiki-region.wmcloud.org/regions?lang=en&title=Japanese%20iris
+    base_url = 'https://wiki-region.wmcloud.org/regions'
+    params = {
+        "lang": lang,
+        "title": title
+        }
+    response = requests.get(base_url, params)
+    countries = response.json().get('countries', [])
+    return countries
+
+def get_wikidata_assessments(qid):
+    # https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&props=claims&format=json&formatversion=2
+    base_url = 'https://www.wikidata.org/w/api.php'
+    params = {
+        "action": "wbgetentities",
+        "ids": qid,
+        "props": 'claims',
+        "format": "json",
+        "formatversion": 2,
+        }
+    response = requests.get(base_url, params, headers={'User-Agent': app.config['CUSTOM_UA']})
+    claims = response.json().get('entities', {}).get(qid, {}).get('claims', {})
+
+    is_bio = False
+    is_taxon = False
+    is_list_disamb = False
+    for claim in claims.get('P31', []):
+        try:
+            instance_of = claim['mainsnak']['datavalue']['value']['id']
+            if instance_of == "Q5":
+                is_bio = True
+            # taxon or clade
+            #elif instance_of == "Q16521" or instance_of == "Q713623":
+            #    is_taxon = True
+            elif instance_of == "Q4167410" or instance_of == "Q13406463":
+                is_list_disamb = True
+        except Exception:
+            continue
+
+    if "P360" in claims:
+        is_list_disamb = True
+
+    # also check instance-of above? right now no because functionally the only
+    # way we map a taxon to its kingdom is if parent-taxon (P171) exists
+    # and cases where the item is a taxon but lacks P171 would look the same as
+    # every bacteria etc. (kingdoms we don't evaluate for) so presence of taxon=yes
+    # but no kingdom doesn't tell you anything particularly valuable.
+    if "P171" in claims:
+        is_taxon = True
+
+    sex_or_gender = None
+    if is_bio:
+        for claim in claims.get('P21', []):
+            sex_or_gender_val = claim['mainsnak']['datavalue']['value']['id']
+            if sex_or_gender_val in NONBINARY_VALUES:
+                sex_or_gender = 'non-binary'
+                break
+            elif sex_or_gender_val in CIS_FEMALE_VALUES:
+                if sex_or_gender == 'male':
+                    sex_or_gender = 'non-binary'
+                    break
+                else:
+                    sex_or_gender = 'female'
+            elif sex_or_gender_val in CIS_MALE_VALUES:
+                if sex_or_gender == 'female':
+                    sex_or_gender = 'non-binary'
+                    break
+                else:
+                    sex_or_gender = 'male'
+
+    return (is_bio, is_taxon, is_list_disamb, sex_or_gender)
+
+def get_kingdoms(qid):
+    # Check whether item is subclass of animal/plant/fungus kingdom
+    # P171: parent-taxon
+    # Q729: Animalia
+    # Q756: Plantae
+    # Q764: Fungus
+    kingdom_query = """
+    SELECT ?kingdom WHERE {
+        wd:<<QID>> (wdt:P171*) ?kingdom.
+        VALUES ?kingdom {
+            <<KINGDOMS>>
+        }
+    }
+    """.replace("<<QID>>", qid).replace("<<KINGDOMS>>", " ".join([f"wd:{q}" for q in KINGDOMS]))
+
+    r = requests.get("https://query.wikidata.org/sparql",
+                        params={'format': 'json', 'query': ' '.join(kingdom_query.split())},
+                        headers={'User-Agent': 'isaac@wikimedia.org; topic-model'})
+    results = r.json()
     try:
-        3 / 0
-    except ZeroDivisionError:
-        logging.error("Three can't be divided by zero.")
-        raise Exception
+        kingdom = KINGDOMS[results['results']['bindings'][0]['kingdom']['value'].split("/")[-1]]
+    except Exception:
+        kingdom = None
+    return kingdom
 
-def get_canonical_page_title(title, lang, session=None):
-    """Resolve redirects / normalization -- used to verify that an input page_title exists"""
-    if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
 
-    result = session.get(
-        action="query",
-        prop="info",
-        inprop='',
-        redirects='',
-        titles=title,
-        format='json',
-        formatversion=2
-    )
-    if 'missing' in result['query']['pages'][0]:
-        return None
+
+def get_canonical_page_title(title, lang):
+    """Resolve redirects / normalization and gets QID -- used to verify that an input page_title exists"""
+    # https://en.wikipedia.org/w/api.php?action=query&prop=pageprops&titles=Douglas_adams&redirects&ppprop=wikibase_item&format=json&formatversion=2
+    base_url = f'https://{lang}.wikipedia.org/w/api.php'
+    params = {
+        "action": "query",
+        "prop": "pageprops",
+        "titles": title,
+        "redirects": True,
+        "ppprop": "wikibase_item",
+        "format": "json",
+        "formatversion": 2,
+        }
+    response = requests.get(base_url, params, headers={'User-Agent': app.config['CUSTOM_UA']})
+    try:
+        page = response.json()['query']['pages'][0]
+    except Exception:
+        page = {'missing': True}
+    
+    if 'missing' in page:
+        return (None, None)
     else:
-        return result['query']['pages'][0]['title']
+        title = page['title']
+        qid = page.get('pageprops', {}).get('wikibase_item', None)
+        return (title, qid)
 
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
     error = None
     lang = None
     page_title = None
+    qid = None
     if request.args.get('title') and request.args.get('lang'):
         lang = request.args['lang']
-        page_title = get_canonical_page_title(request.args['title'], lang)
+        page_title, qid = get_canonical_page_title(request.args['title'], lang)
         if page_title is None:
             error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, request.args['title'])
     elif request.args.get('lang'):
@@ -78,19 +263,8 @@ def validate_api_args():
     else:
         error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
 
-    return lang, page_title, error
+    return lang, page_title, qid, error
 
-def load_model():
-    """Start-up function to load in model or other dependencies.
-
-    A common template is loading a data file or model into memory.
-    os.path.join(__dir__, 'filename')) is your friend.
-    """
-    for letter in 'aeiou':
-        EXAMPLE_MODEL[letter] = 'vowel'
-    logging.info(f"Model loaded: {EXAMPLE_MODEL}")
-
-load_model()
 
 if __name__ == '__main__':
     app.run()
