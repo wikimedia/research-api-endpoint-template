@@ -37,6 +37,41 @@ NONBINARY_VALUES = {'Q1097630', 'Q1052281', 'Q2449503', 'Q48270', 'Q1399232', 'Q
                     'Q121307100', 'Q121368243', 'Q59592239', 'Q124637723', 'Q1054122', 'Q105222132', 'Q130315012', 'Q130315001'}
 
 KINGDOMS = {'Q729': 'animal', 'Q756': 'plant', 'Q764': 'fungus'}
+OCCUPATIONS = {
+    "Q2066131": "Culture.Sports",
+    "Q19261760": "STEM.Earth_and_the_Environment.Humans_and_the_environment",
+    "Q3578589": "STEM.Earth_and_the_Environment.Sustainability",
+    "Q864503": "STEM.Biology",
+    "Q43845": "History_and_Society.Business_and_economics",
+    "Q593644": "STEM.Chemistry",
+    "Q212238": "History_and_Society.Politics_and_government",
+    "Q3315492": "Culture.Philosophy_and_religion",
+    "Q82594": "STEM.Computing",
+    "Q11424604": "STEM.Earth_and_the_Environment.Physical_Geography",
+    "Q974144": "History_and_Society.Education",
+    "Q81096": "STEM.Engineering",
+    "Q11974939": "STEM.Medicine_&_Health",
+    "Q1662485": "History_and_Society.Education",
+    "Q1930187": "Culture.Media.Journalism",
+    "Q185351": "History_and_Society.Politics_and_government",
+    "Q14467526": "Culture.Literature_and_Languages",
+    "Q170790": "STEM.Mathematics",
+    "Q47064": "History_and_Society.Military_and_warfare",
+    "Q639669": "Culture.Media.Music",
+    "Q169470": "STEM.Physics_and_Space",
+    "Q82955": "History_and_Society.Politics_and_government",
+    "Q15319501": "History_and_Society.Society_and_Culture",
+    "Q50995749": "Culture.Sports",
+    "Q56148021": "History_and_Society.Transportation",
+    "Q36180": "Culture.Literature_and_Languages",
+    "Q245068": "Culture.Performing_arts",
+    "Q2259451": "Culture.Performing_arts",
+    "Q10800557": "Culture.Media.Film_and_Television",
+    "Q138858": "Culture.Performing_arts",
+    "Q158852": "Culture.Media.Music",
+    "Q5716684": "Culture.Performing_arts",
+    "Q11063": "STEM.Physics_and_Space"
+    }
 
 @app.route('/article', methods=['GET'])
 def get_topic_predictions():
@@ -216,6 +251,36 @@ def get_kingdoms(qid):
         kingdom = None
     return kingdom
 
+
+def get_occupation_topics(qid):
+    """Map occupation values for humans to high-level topics"""
+    occupation_query = """
+    SELECT ?topic WHERE {
+        wd:<<QID>> wdt:P106 ?occupation.
+        ?occupation (wdt:P279*) ?topic
+        VALUES ?topic {
+            <<OCCUPATIONS>>
+        }
+    }
+    """.replace("<<QID>>", qid).replace("<<OCCUPATIONS>>", " ".join([f"wd:{q}" for q in OCCUPATIONS]))
+    
+    r = requests.get("https://query.wikidata.org/sparql",
+                        params={'format': 'json', 'query': ' '.join(occupation_query.split())},
+                        headers={'User-Agent': 'isaac@wikimedia.org; topic-model'})
+    results = r.json()
+    try:
+        occ_topics = {}
+        for row in results['results']['bindings']:
+            topic_qid = row['topic']['value'].split("/")[-1]
+            topic_lbl = OCCUPATIONS.get(topic_qid)
+            if topic_lbl:
+                occ_topics[topic_lbl] = occ_topics.get(topic_lbl, 0) + 1
+        topic_sum = sum(occ_topics.values())
+        # must have at least 10% support -- verrrry arbitrary but trying to weed out outliers
+        # where e.g., someone has 10 occupations but one is very minor and different from the others
+        return [t for t in sorted(occ_topics, key=occ_topics.get, reverse=True) if occ_topics[t] / topic_sum >= 0.1]
+    except Exception:
+        return None
 
 
 def get_canonical_page_title(title, lang):
