@@ -310,14 +310,15 @@ def get_regions():
         result = {"qid": qid, "countries":[], "wikidata":[]}
         countries = set()
         details = []
-        for property, p_country in get_cultural_regions(claims):
-            details.append({property: COUNTRY_PROPERTIES[property], "country": p_country})
-            countries.add(p_country)
-        coord_country = get_geographic_region(claims)
-        if coord_country:
-            details.append({"P625": "coordinate location", "country": coord_country})
-            countries.add(coord_country)
-        result["wikidata"] = details
+        if claims:
+            for property, p_country in get_cultural_regions(claims):
+                details.append({property: COUNTRY_PROPERTIES[property], "country": p_country})
+                countries.add(p_country)
+            coord_country = get_geographic_region(claims)
+            if coord_country:
+                details.append({"P625": "coordinate location", "country": coord_country})
+                countries.add(coord_country)
+            result["wikidata"] = details
         # a few additional checks when specific Wikipedia articles provided
         if title and lang:
             if GROUNDTRUTH:
