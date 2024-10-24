@@ -20,6 +20,7 @@ cors = CORS(app, resources={r'*': {'origins': '*'}})
 
 # fast-text model for making predictions
 MODEL = fasttext.load_model(os.path.join(__dir__, 'model.bin'))
+#MODEL = fasttext.load_model(os.path.join(__dir__, 'model_all-wikis-topic-v2-2024-10.bin'))
 
 # male, cis man, assigned male at birth
 CIS_MALE_VALUES = {'Q6581097', 'Q15145778', 'Q25388691'}
@@ -38,7 +39,6 @@ NONBINARY_VALUES = {'Q1097630', 'Q1052281', 'Q2449503', 'Q48270', 'Q1399232', 'Q
 
 KINGDOMS = {'Q729': 'animal', 'Q756': 'plant', 'Q764': 'fungus'}
 OCCUPATIONS = {
-    "Q2066131": "Culture.Sports",
     "Q19261760": "STEM.Earth_and_the_Environment.Humans_and_the_environment",
     "Q3578589": "STEM.Earth_and_the_Environment.Sustainability",
     "Q864503": "STEM.Biology",
@@ -63,14 +63,17 @@ OCCUPATIONS = {
     "Q15319501": "History_and_Society.Society_and_Culture",
     "Q50995749": "Culture.Sports",
     "Q56148021": "History_and_Society.Transportation",
-    "Q36180": "Culture.Literature_and_Languages",
     "Q245068": "Culture.Performing_arts",
     "Q2259451": "Culture.Performing_arts",
     "Q10800557": "Culture.Media.Film_and_Television",
     "Q138858": "Culture.Performing_arts",
     "Q158852": "Culture.Media.Music",
     "Q5716684": "Culture.Performing_arts",
-    "Q11063": "STEM.Physics_and_Space"
+    "Q11063": "STEM.Physics_and_Space",
+    "Q49757": "Culture.Literature_and_Languages",
+    "Q214917": "Culture.Performing_arts",
+    "Q28389": "Culture.Media.Film_and_Television",
+    "Q6625963": "Culture.Literature_and_Languages",
     }
 
 @app.route('/article', methods=['GET'])
@@ -101,6 +104,9 @@ def get_topic_predictions():
             result['results']['person'] = {'biography': is_bio}
             if is_bio:
                 result['results']['person']['gender'] = gender
+                start = time.time()
+                result['results']['person']['topics'] = get_occupation_topics(qid)
+                latency['occ-topics'] = time.time() - start
             result['results']['species'] = {'taxon': is_taxon}
             if is_taxon:
                 start = time.time()
@@ -255,7 +261,7 @@ def get_kingdoms(qid):
 def get_occupation_topics(qid):
     """Map occupation values for humans to high-level topics"""
     occupation_query = """
-    SELECT ?topic WHERE {
+    SELECT DISTINCT ?occupation ?topic WHERE {
         wd:<<QID>> wdt:P106 ?occupation.
         ?occupation (wdt:P279*) ?topic
         VALUES ?topic {
@@ -278,7 +284,12 @@ def get_occupation_topics(qid):
         topic_sum = sum(occ_topics.values())
         # must have at least 10% support -- verrrry arbitrary but trying to weed out outliers
         # where e.g., someone has 10 occupations but one is very minor and different from the others
-        return [t for t in sorted(occ_topics, key=occ_topics.get, reverse=True) if occ_topics[t] / topic_sum >= 0.1]
+        result = []
+        for t in sorted(occ_topics, key=occ_topics.get, reverse=True):
+            t_prop = occ_topics[t] / topic_sum
+            if t_prop >= 0.2:
+                result.append({'topic':t, 'weight':t_prop})
+        return result
     except Exception:
         return None
 
