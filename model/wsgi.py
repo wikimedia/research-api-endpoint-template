@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import time
 
@@ -19,18 +20,21 @@ app.config.update(yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml')
 cors = CORS(app, resources={r'*': {'origins': '*'}})
 
 # fast-text model for making predictions
-MODEL = fasttext.load_model(os.path.join(__dir__, 'model.bin'))
-#MODEL = fasttext.load_model(os.path.join(__dir__, 'model_all-wikis-topic-v2-2024-10.bin'))
+#MODEL = fasttext.load_model(os.path.join(__dir__, 'model.bin'))
+MODEL = fasttext.load_model(os.path.join(__dir__, 'model_all-wikis-topic-v3-2024-12.bin'))
 
-# male, cis man, assigned male at birth
-CIS_MALE_VALUES = {'Q6581097', 'Q15145778', 'Q25388691'}
-# female, cis woman, assigned female at birth
-CIS_FEMALE_VALUES = {'Q6581072', 'Q15145779', 'Q56315990'}
+# Ignored:
+# * 'Q25388691' (assigned male at birth) -- doesn't indicate current gender
+# * 'Q56315990' (assigned female at birth) -- doesn't indicate current gender
+# male, cis man, trans man, transmasculine, intersex man
+MALE_VALUES = {'Q6581097', 'Q15145778', 'Q2449503', 'Q27679766', 'Q121307094'}
+# female, cis woman, trans woman, transfeminine, intersex woman, fakafifine
+FEMALE_VALUES = {'Q6581072', 'Q15145779', 'Q1052281', 'Q27679684', 'Q121307100', 'Q112597587'}
 # intersex, trans woman, trans man, non-binary, faʻafafine, māhū, kathoey, fakaleitī, hijra, two-spirit,
 # transmasculine, transfeminine, muxe, agender, genderqueer, genderfluid, neutrois, pangender, cogenitor,
 # neutral sex, third gender, X-gender, demiboy, demigirl, bigender, transgender, travesti, 'akava'ine
-# androgyne, yinyang ren, intersex person, boi, takatāpui, fakafifine, intersex man, intersex woman,
-# demimasc, altersex, gender agnostic, futanari, transsexual, brotherboy, sistergirl
+# androgyne, yinyang ren, intersex person, boi, takatāpui, fakafifine, intersex man,
+# intersex woman, demimasc, altersex, gender agnostic, futanari, transsexual, brotherboy, sistergirl
 NONBINARY_VALUES = {'Q1097630', 'Q1052281', 'Q2449503', 'Q48270', 'Q1399232', 'Q3277905', 'Q746411', 'Q350374', 'Q660882', 'Q301702',
                     'Q27679766', 'Q27679684', 'Q3177577', 'Q505371', 'Q12964198', 'Q18116794', 'Q1289754', 'Q7130936', 'Q64017034',
                     'Q52261234', 'Q48279', 'Q96000630', 'Q93954933', 'Q93955709', 'Q859614', 'Q189125', 'Q17148251', 'Q4700377',
@@ -74,6 +78,44 @@ OCCUPATIONS = {
     "Q214917": "Culture.Performing_arts",
     "Q28389": "Culture.Media.Film_and_Television",
     "Q6625963": "Culture.Literature_and_Languages",
+    "Q1476215": "History_and_Society.Human_Rights",
+    }
+
+TIME_PROPERTIES = {
+    'P569'  : 'date of birth',
+    'P570'  : 'date of death',
+    'P571'  : 'inception',
+    'P575'  : 'time of discovery or invention',
+    'P576'  : 'dissolved, abolished or demolished',
+    'P577'  : 'publication date',
+    'P580'  : 'start time',
+    'P582'  : 'end time',
+    'P585'  : 'point in time',
+    'P619'  : 'UTC date of spacecraft launch',
+    'P620'  : 'time of spacecraft landing',
+    'P622'  : 'spacecraft docking/undocking date',
+    'P746'  : 'date of disappearance',
+    'P813'  : 'retrieved',
+    'P1191' : 'date of first performance',
+    'P1249' : 'time of earliest written record',
+    'P1317' : 'floruit',  # date of activity
+    'P1619' : 'date of official opening',
+    'P1734' : 'oath of office date',
+    'P2031' : 'work period (start)',
+    'P2032' : 'work period (end)',
+    'P2669' : 'discontinued date',
+    'P2754' : 'production date',
+    'P2913' : 'date depicted',
+    'P3999' : 'date of official closure',
+    'P4566' : 'awarded for period',
+    'P5204' : 'date of commercialization',
+    'P6949' : 'announcement date',
+    'P7588' : 'effective date',
+    'P7589' : 'enacted date',
+    'P8556' : 'extinction date',
+    'P10135': 'recording date',
+    'P10673': 'debut date',
+    'P10786': 'date of incorporation'
     }
 
 @app.route('/article', methods=['GET'])
@@ -90,20 +132,25 @@ def get_topic_predictions():
         latency = {}
         start = time.time()
         if qid:
-            is_bio, is_taxon, is_list_disamb, gender = get_wikidata_assessments(qid)
+            is_bio, is_taxon, is_list_disamb, gender, startyear, endyear = get_wikidata_assessments(qid)
         else:
-            is_bio, is_taxon, is_list_disamb, gender = None, None, None, None
+            is_bio, is_taxon, is_list_disamb, gender, startyear, endyear = None, None, None, None, None, None
         latency['base-wikidata'] = time.time() - start
         if is_list_disamb:
             result['results']['list/disambig'] = True
         else:
+            if startyear:
+                result['results']['time'] = {'start':startyear, 'end':endyear}
             start = time.time()
             countries = get_country_predictions(lang, page_title)
             latency['countries'] = time.time() - start
             result['results']['countries'] = countries
             result['results']['person'] = {'biography': is_bio}
             if is_bio:
-                result['results']['person']['gender'] = gender
+                if gender:
+                    result['results']['person']['gender'] = " + ".join(gender)
+                else:
+                    result['results']['person']['gender'] = "unknown"
                 start = time.time()
                 result['results']['person']['topics'] = get_occupation_topics(qid)
                 latency['occ-topics'] = time.time() - start
@@ -170,6 +217,40 @@ def get_country_predictions(lang, title):
     countries = response.json().get('countries', [])
     return countries
 
+def get_year_range(claim):
+    try:
+        d = claim["mainsnak"]["datavalue"]["value"]
+        # Gregorian or Julian calendar (currently only ones allowed on Wikidata)
+        if (d['calendarmodel'] == 'http://www.wikidata.org/entity/Q1985727' 
+            or d['calendarmodel'] == 'http://www.wikidata.org/entity/Q1985786'):
+            # leading minus sign for BCE dates has to be handled
+            year = int(d['time'][0] + d['time'][1:].split('-', maxsplit=1)[0])
+            if d['precision'] >= 9:  # year, month, day, etc.
+                return [year]
+            elif d['precision'] == 8:
+                # decade  -- e.g., 1980s as 1980-1989 or 1010s BCE as 1019-1010 BCE
+                # goal: return start/end of decade
+                # negative decades are tricky so have to shift down to get floor of 1010 BCE -> -1020
+                if year < 0:  
+                    year = year - 1
+                year = math.floor(year / 10) * 10
+                return [year, year + 9]
+            elif d['precision'] == 7:
+                # century -- e.g., 13th century as 1201-1300 or 1st century BCE as 100-1 BCE
+                # goal: return start/end of century
+                # positive centuries include 1st year of "next" century so have to shift down to get floor of 1300 -> 1200
+                if year > 0: 
+                    year = year - 1
+                year = math.floor(year / 100) * 100
+                # positive centuries start in 1st year and go till 1st year of "next" century
+                if year > 0:
+                    year = year + 1
+                return [year, year + 99]
+        return []
+    except Exception:
+        return None
+
+
 def get_wikidata_assessments(qid):
     # https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&props=claims&format=json&formatversion=2
     base_url = 'https://www.wikidata.org/w/api.php'
@@ -199,6 +280,20 @@ def get_wikidata_assessments(qid):
         except Exception:
             continue
 
+    years = []
+    startyear = None
+    endyear = None
+    for property in claims:
+        if property in TIME_PROPERTIES:
+            for claim in claims[property]:
+                if claim.get("rank") != "deprecated":
+                    claim_years = get_year_range(claim)
+                    if claim_years:
+                        years.extend(claim_years)
+    if years:
+        startyear = min(years)
+        endyear = max(years)
+
     if "P360" in claims:
         is_list_disamb = True
 
@@ -210,27 +305,19 @@ def get_wikidata_assessments(qid):
     if "P171" in claims:
         is_taxon = True
 
-    sex_or_gender = None
+    sex_or_gender = set()
     if is_bio:
         for claim in claims.get('P21', []):
-            sex_or_gender_val = claim['mainsnak']['datavalue']['value']['id']
-            if sex_or_gender_val in NONBINARY_VALUES:
-                sex_or_gender = 'non-binary'
-                break
-            elif sex_or_gender_val in CIS_FEMALE_VALUES:
-                if sex_or_gender == 'male':
-                    sex_or_gender = 'non-binary'
-                    break
-                else:
-                    sex_or_gender = 'female'
-            elif sex_or_gender_val in CIS_MALE_VALUES:
-                if sex_or_gender == 'female':
-                    sex_or_gender = 'non-binary'
-                    break
-                else:
-                    sex_or_gender = 'male'
+            if claim.get("rank") != "deprecated":
+                sex_or_gender_val = claim['mainsnak']['datavalue']['value']['id']
+                if sex_or_gender_val in FEMALE_VALUES:
+                    sex_or_gender.add('woman')
+                if sex_or_gender_val in MALE_VALUES:
+                    sex_or_gender.add('man')
+                if sex_or_gender_val in NONBINARY_VALUES:
+                    sex_or_gender.add('non-binary')
 
-    return (is_bio, is_taxon, is_list_disamb, sex_or_gender)
+    return (is_bio, is_taxon, is_list_disamb, sex_or_gender, startyear, endyear)
 
 def get_kingdoms(qid):
     # Check whether item is subclass of animal/plant/fungus kingdom
