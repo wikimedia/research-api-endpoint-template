@@ -6,7 +6,7 @@ from urllib.parse import unquote_plus
 # where nearest neighbor index and models will go
 # must be set before library imports
 EMB_DIR = '/etc/api-endpoint'
-os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
+os.environ['HF_HOME'] = EMB_DIR
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
