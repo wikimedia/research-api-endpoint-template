@@ -217,16 +217,15 @@ def get_country_predictions(lang, title):
     countries = response.json().get('countries', [])
     return countries
 
-def get_year_range(claim):
+def value_to_years(d):
+    years = []
     try:
-        d = claim["mainsnak"]["datavalue"]["value"]
-        # Gregorian or Julian calendar (currently only ones allowed on Wikidata)
         if (d['calendarmodel'] == 'http://www.wikidata.org/entity/Q1985727' 
             or d['calendarmodel'] == 'http://www.wikidata.org/entity/Q1985786'):
             # leading minus sign for BCE dates has to be handled
             year = int(d['time'][0] + d['time'][1:].split('-', maxsplit=1)[0])
             if d['precision'] >= 9:  # year, month, day, etc.
-                return [year]
+                years.append(year)
             elif d['precision'] == 8:
                 # decade  -- e.g., 1980s as 1980-1989 or 1010s BCE as 1019-1010 BCE
                 # goal: return start/end of decade
@@ -234,7 +233,8 @@ def get_year_range(claim):
                 if year < 0:  
                     year = year - 1
                 year = math.floor(year / 10) * 10
-                return [year, year + 9]
+                years.append(year)
+                years.append(year + 9)
             elif d['precision'] == 7:
                 # century -- e.g., 13th century as 1201-1300 or 1st century BCE as 100-1 BCE
                 # goal: return start/end of century
@@ -245,10 +245,71 @@ def get_year_range(claim):
                 # positive centuries start in 1st year and go till 1st year of "next" century
                 if year > 0:
                     year = year + 1
-                return [year, year + 99]
-        return []
+                years.append(year)
+                years.append(year + 99)
     except Exception:
-        return None
+        pass
+
+    return years
+
+
+def get_year_range(claims):
+    years = []
+    birthday = None
+    has_death = False
+    missing_endtime = False
+    for property in claims:
+        # check for start-time / end-time qualifiers
+        if not missing_endtime:
+            for claim in claims[property]:
+                start_time = False
+                end_time = False
+                for qualifier in claim.get('qualifiers', {}):
+                    if qualifier == "P580":  # start time
+                        for qual in claim['qualifiers'][qualifier]:
+                            qual_years = value_to_years(qual['datavalue']['value'])
+                            if qual_years:
+                                start_time = True
+                                years.extend(qual_years)
+                    elif qualifier == "P582":  # end time
+                        for qual in claim['qualifiers'][qualifier]:
+                            qual_years = value_to_years(qual['datavalue']['value'])
+                            if qual_years:
+                                end_time = True
+                                years.extend(qual_years)
+                if start_time and not end_time:
+                    missing_endtime = True
+        if property in TIME_PROPERTIES:
+            for claim in claims[property]:
+                if claim.get("rank") != "deprecated":
+                    try:
+                        d = claim["mainsnak"]["datavalue"]["value"]
+                        claim_years = value_to_years(d)
+                        if claim_years:
+                            if property == "P569":
+                                birthday = claim_years[0]
+                            elif property == "P570":
+                                has_death = True
+                            years.extend(claim_years)
+                    except Exception:
+                        continue
+                            
+    if birthday is not None and not has_death:
+        current_year = time.gmtime().tm_year
+        if current_year - birthday <= 115:  # WP:BLP
+            years.append(current_year)
+    elif missing_endtime:
+        current_year = time.gmtime().tm_year
+        years.append(current_year)
+         
+    if years:
+        startyear = min(years)
+        endyear = max(years)
+    else:
+        startyear = None
+        endyear = None
+
+    return startyear, endyear
 
 
 def get_wikidata_assessments(qid):
@@ -280,19 +341,7 @@ def get_wikidata_assessments(qid):
         except Exception:
             continue
 
-    years = []
-    startyear = None
-    endyear = None
-    for property in claims:
-        if property in TIME_PROPERTIES:
-            for claim in claims[property]:
-                if claim.get("rank") != "deprecated":
-                    claim_years = get_year_range(claim)
-                    if claim_years:
-                        years.extend(claim_years)
-    if years:
-        startyear = min(years)
-        endyear = max(years)
+    startyear, endyear = get_year_range(claims)
 
     if "P360" in claims:
         is_list_disamb = True
