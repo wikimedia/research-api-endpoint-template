@@ -177,7 +177,7 @@ def get_wikitext(lang, revid, title, session=None):
 def get_summary(prev_wikitext, curr_wikitext, lang):
     """Get edit types summary."""
     try:
-        differ = SimpleEditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang)
+        differ = SimpleEditTypes(content_type="wikitext", prev_content=prev_wikitext, curr_content=curr_wikitext, lang=lang)
         summary = differ.get_diff()
     except Exception:
         summary = None
@@ -188,7 +188,7 @@ def get_summary(prev_wikitext, curr_wikitext, lang):
 def get_details(prev_wikitext, curr_wikitext, lang):
     """Get detailed edit types list."""
     try:
-        differ = StructuredEditTypes(prev_wikitext=prev_wikitext, curr_wikitext=curr_wikitext, lang=lang, timeout=False)
+        differ = StructuredEditTypes(content_type="wikitext", prev_content=prev_wikitext, curr_content=curr_wikitext, lang=lang)
         actions = differ.get_diff()
         tree_diff = differ.tree_diff
     except Exception:
