@@ -18,10 +18,92 @@ app.config.update(
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-@app.route('/api/v1/outlinks-details', methods=['GET'])
-@app.route('/api/v1/details', methods=['GET'])
-def get_outlinks_details():
-    return get_details()
+
+@app.route('/api/v1/exemplar', methods=['GET'])
+def get_morelike_details():
+    lang, page_title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'Error': error})
+    else:
+        page_id, qid = get_page_ids(page_title, lang)
+        try:
+            page_quality = add_quality_data({page_title: f'{lang}wiki-{page_id}'})[0][1]
+        except Exception:
+            page_quality = 0
+        links = get_similar_articles(page_title, lang)
+        qual_by_title = add_quality_data_morelike(links)
+        if qid:
+            article_ios = get_p31(qid)
+        else:
+            article_ios = None
+        better_but_diff_io = []
+        candidates = []
+        discarded = []
+        top_quartile_threshold = sorted(qual_by_title, key=lambda x: x[2], reverse=True)[len(qual_by_title) // 4][2]
+        # generally a better example but top 25% acceptable if page is really good or similar articles are really bad
+        base_quality_threshold = min(page_quality, top_quartile_threshold)
+        exemplar = None
+        for i, (title, c_qid, score) in enumerate(qual_by_title, start=1):
+            qual_cat = qual_to_cat(score)
+            row = {'title':title, 'score':score, 'class': qual_cat, 'morelike-rank':i}
+            if score >= base_quality_threshold:
+                if article_ios and not exemplar:
+                    candidate_ios = get_p31(c_qid)
+                    row['instance-of'] = "|".join(candidate_ios)
+                    if article_ios.intersection(candidate_ios):
+                        candidates.append(row)
+                        if score >= top_quartile_threshold:
+                            exemplar = row
+                    else:
+                        better_but_diff_io.append(row)
+                else:
+                    candidates.append(row)
+            else:
+                discarded.append(row)
+        if not exemplar:
+            exemplar = candidates[0]
+        result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
+                  'quality': page_quality,
+                  'exemplar': exemplar,
+                  'candidates': candidates,
+                  'topic-mismatch': better_but_diff_io,
+                  'quality-mismatch': discarded
+                  }
+        return jsonify(result)
+    
+
+def get_page_ids(title, lang):
+    """Resolve redirects / normalization -- used to verify that an input page_title exists"""
+    session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
+
+    result = session.get(
+        action="query",
+        prop="pageprops",
+        ppprop='wikibase_item',
+        redirects='',
+        titles=title,
+        format='json',
+        formatversion=2
+    )
+    if 'missing' in result['query']['pages'][0]:
+        return (None, None)
+    else:
+        return (result['query']['pages'][0]['pageid'], result['query']['pages'][0].get('pageprops', {}).get('wikibase_item'))
+
+
+def add_quality_data_morelike(links):
+    title_qual = []
+    with SqliteDict(os.path.join(__dir__, 'resources/quality.sqlite')) as qual_db:
+        for title in links:
+            try:
+                article_id, qid = links[title]
+                q = qual_db[article_id]  # get qual score
+                title_qual.append((title, qid, q))
+            except KeyError:
+                continue
+
+    return title_qual
+
 
 def qual_to_cat(q):
     if q <= 0.36:
@@ -40,6 +122,8 @@ def qual_to_cat(q):
         return None
 
 
+@app.route('/api/v1/outlinks-details', methods=['GET'])
+@app.route('/api/v1/details', methods=['GET'])
 def get_details():
     """Get gender distribution details (individual links and aggregate stats) for links to/from an article."""
     lang, page_title, error = validate_api_args()
@@ -83,6 +167,43 @@ def get_distribution(links):
 
     qual_dist = [(lbl, qual_dist[lbl]) for lbl in sorted(qual_dist, key=qual_dist.get, reverse=True)]
     return qual_dist
+
+
+def get_similar_articles(title, lang, limit=100):
+    """Gather set of up to `limit` links for an article."""
+    session = mwapi.Session(f'https://{lang}.wikipedia.org',
+                            user_agent=app.config['CUSTOM_UA'])
+
+    # generate list of all out/inlinks (to namespace 0) from the article and their associated Wikidata IDs
+    # https://en.wikipedia.org/w/api.php?action=query&generator=search&format=json&gsrnamespace=0&gsrwhat=text&gsrsearch=morelike:Wayne_McDaniel&prop=pageprops&ppprop=%22%22&gsrlimit=3
+    result = session.get(
+            action="query",
+            generator="search",
+            titles=title,
+            redirects='',
+            prop="pageprops",
+            ppprop="wikibase_item",
+            gsrwhat="text",
+            gsrnamespace=0,
+            gsrsearch=f"morelike:{title}",
+            gsrlimit=limit,
+            format='json',
+            formatversion=2
+    )
+
+    try:
+        link_article_ids = {}
+        for link in result['query']['pages']:
+            if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
+                qid = link.get('pageprops', {}).get('wikibase_item')
+                if qid:
+                    pid = link['pageid']
+                    title = link['title']
+                    article_id = f'{lang}wiki-{pid}'
+                    link_article_ids[title] = (article_id, qid)
+        return link_article_ids
+    except Exception:
+        return {}
 
 def get_links(title, lang, limit=1500, session=None, verbose=False):
     """Gather set of up to `limit` links for an article."""
@@ -155,6 +276,26 @@ def get_canonical_page_title(title, lang, session=None):
         return None
     else:
         return result['query']['pages'][0]['title']
+    
+def get_p31(qid):
+    # https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=Q2479913&property=P31&format=json&formatversion=2&props
+    session = mwapi.Session(f'https://www.wikidata.org', user_agent='isaac@wikimedia.org')#app.config['CUSTOM_UA'])
+    instance_ofs = set()
+    try:
+        result = session.get(
+            action="wbgetclaims",
+            entity=qid,
+            property='P31',
+            format='json',
+            formatversion=2
+        )
+        for claim in result['claims']['P31']:
+            io = claim['mainsnak']['datavalue']['value']['id']
+            if io:
+                instance_ofs.add(io)
+        return instance_ofs
+    except Exception:
+        return instance_ofs
 
 def validate_api_args():
     """Validate API arguments for language-agnostic model."""
