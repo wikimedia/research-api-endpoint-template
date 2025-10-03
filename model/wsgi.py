@@ -51,7 +51,7 @@ def get_morelike_details():
             if score >= base_quality_threshold:
                 if article_ios and not exemplar:
                     candidate_ios = get_p31(c_qid)
-                    row['instance-of'] = "|".join(candidate_ios)
+                    row['instance-of'] = list(candidate_ios)
                     if article_ios.intersection(candidate_ios):
                         candidates.append(row)
                         if score >= top_quartile_threshold:
@@ -67,8 +67,13 @@ def get_morelike_details():
                 exemplar = candidates[0]
             else:
                 exemplar = better_but_diff_io[0]
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
-                  'quality': page_quality,
+        input = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
+                 'quality': page_quality,
+                 'qid': qid,
+                 'instance-of': list(article_ios)
+                 }
+        result = {
+                  'input': input,
                   'exemplar': exemplar,
                   'candidates': candidates,
                   'topic-mismatch': better_but_diff_io,
