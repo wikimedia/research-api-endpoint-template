@@ -61,7 +61,10 @@ def get_morelike_details():
             else:
                 discarded.append(row)
         if not exemplar:
-            exemplar = candidates[0]
+            if candidates:
+                exemplar = candidates[0]
+            else:
+                exemplar = better_but_diff_io[0]
         result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
                   'quality': page_quality,
                   'exemplar': exemplar,
