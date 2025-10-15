@@ -1,6 +1,7 @@
 from collections import Counter
 import logging
 import os
+from pathlib import Path
 import time
 from urllib.parse import unquote_plus
 
@@ -9,6 +10,7 @@ from urllib.parse import unquote_plus
 EMB_DIR = '/etc/api-endpoint'
 os.environ['HF_HOME'] = EMB_DIR
 
+from flair import cache_root
 from flair.data import Sentence
 from flair.nn import Classifier
 from flask import Flask, request, jsonify
@@ -38,7 +40,8 @@ MIN_SEQ_LEN = 10
 NUM_PAGES_PER_SEARCH = 5
 MAX_PAGES = None
 
-TAGGER = Classifier.load('ner')
+cache_root = Path(EMB_DIR)
+TAGGER = Classifier.load('flair/ner-english')
 
 MODEL_INFO = {'emb':emb_model_name, 'ner':'flair-classifier-ner'}
 
