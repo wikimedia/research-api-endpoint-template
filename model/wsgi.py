@@ -7,12 +7,13 @@ from urllib.parse import unquote_plus
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-EMB_DIR = '/etc/api-endpoint'
+#EMB_DIR = '/etc/api-endpoint'
+EMB_DIR = "./"
 os.environ['HF_HOME'] = EMB_DIR
 
 from flair import cache_root
 from flair.data import Sentence
-from flair.nn import Classifier
+from flair.models import SequenceTagger
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from mwedittypes.utils import wikitext_to_plaintext
@@ -41,7 +42,7 @@ NUM_PAGES_PER_SEARCH = 5
 MAX_PAGES = None
 
 cache_root = Path(EMB_DIR)
-TAGGER = Classifier.load('ner')
+TAGGER = SequenceTagger.load('ner')
 
 MODEL_INFO = {'emb':emb_model_name, 'ner':'flair-classifier-ner'}
 
