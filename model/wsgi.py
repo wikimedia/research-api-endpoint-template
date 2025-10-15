@@ -41,7 +41,7 @@ NUM_PAGES_PER_SEARCH = 5
 MAX_PAGES = None
 
 cache_root = Path(EMB_DIR)
-TAGGER = Classifier.load('flair/ner-english')
+TAGGER = Classifier.load('ner')
 
 MODEL_INFO = {'emb':emb_model_name, 'ner':'flair-classifier-ner'}
 
