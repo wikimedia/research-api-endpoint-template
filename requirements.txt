@@ -1,3 +1,4 @@
+flair
 Flask
 Flask-Cors
 mwedittypes
