@@ -7,8 +7,7 @@ from urllib.parse import unquote_plus
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-#EMB_DIR = '/etc/api-endpoint'
-EMB_DIR = "./"
+EMB_DIR = '/etc/api-endpoint'
 os.environ['HF_HOME'] = EMB_DIR
 
 from flair import cache_root
