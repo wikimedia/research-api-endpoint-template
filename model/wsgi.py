@@ -1,5 +1,6 @@
 # Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
 import os
+import urllib.parse
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -20,6 +21,207 @@ app.json.sort_keys = False
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
+# see: https://public-paws.wmcloud.org/55703823/exemplars/ga-fa-categories.ipynb
+TOP_ARTICLE_CATEGORIES = {
+    "arwiki": "مقالات_جيدة|مقالات_مختارة",
+    "arywiki": "مقالة_مزيانة",
+    "astwiki": "Wikipedia:Artículos_bonos_na_Wikipedia_n'inglés|Wikipedia:Artículos_destacaos",
+    "bgwiki": "Добри_статии_на_английски|Избрани_статии",
+    "biwiki": "Gud_atikel",
+    "bnwiki": "ভালো_নিবন্ধ|নির্বাচিত_নিবন্ধ",
+    "bxrwiki": "Википеэди:Һайн_үгүүлэл_(en-wiki)|Википеэди:Шэлэгдэмэл_үгүүлэл",
+    "ckbwiki": "وتارە_باشەکان|وتارە_ھەڵبژێردراوەکان",
+    "elwiki": "Καλά_λήμματα|Προβεβλημένα_λήμματα",
+    "enwiki": "Good_articles|Featured_articles",
+    "eswiki": "Wikipedia:Artículos_buenos_en_la_Wikipedia_en_inglés|Wikipedia:Artículos_destacados",
+    "euwiki": "Artikulu_onak|Artikulu_nabarmenduak",
+    "fawiki": "مقاله‌های_خوب|مقاله‌های_برگزیده",
+    "frwiki": "Bon_article_en_anglais|Article_de_qualité",
+    "glwiki": "Artigos_bos|Wikipedia:Artigos_de_calidade",
+    "gnwiki": "Vikipetã:Artículos_buenos_en_la_Wikipedia_en_inglés",
+    "guwiki": "સરસ_લેખો|ઉમદા_લેખ",
+    "hrwiki": "Dobri_članci|Izvrsni_članci",
+    "huwiki": "Jó_cikkek|Kiemelt_cikkek",
+    "idwiki": "Semua_artikel_bagus|Artikel_pilihan",
+    "iswiki": "Gæðagreinar|Wikipedia:Úrvalsgreinar",
+    "jawiki": "良質な記事|秀逸な記事",
+    "kowiki": "좋은_글|알찬_글",
+    "mlwiki": "തിരഞ്ഞെടുക്കാവുന്ന_ലേഖനങ്ങൾ|തിരഞ്ഞെടുത്ത_ലേഖനങ്ങൾ",
+    "mswiki": "Rencana_baik|Rencana_pilihan",
+    "mywiki": "ဆောင်းပါးကောင်းများ",
+    "mznwiki": "خار_بنویشته_ئون|هوجی_بنویشته‌ئون",
+    "napwiki": "Articule_'e_qualità_'ncopp_a_en.wiki|Articule_'n_vitrina",
+    "ocwiki": "Bon_article_en_anglés|Article_de_qualitat",
+    "piwiki": "Good_articles|Featured_articles",
+    "plwiki": "Dobre_artykuły|Artykuły_na_Medal",
+    "pswiki": "ښې_ليکنې",
+    "ptwiki": "!Artigos_bons_na_Wikipédia_em_inglês|!Artigos_destacados",
+    "roa_tarawiki": "Vôsce_de_qualitate_sus_a_en.wiki",
+    "scowiki": "Guid_airticles|Featurt_airticles",
+    "sdwiki": "بهترين_مضمون|چونڊ_مضمون",
+    "skwiki": "Dobré_články_po_anglicky|Wikipédia:Najlepšie_články",
+    "thwiki": "บทความคุณภาพ|บทความคัดสรร",
+    "trwiki": "Kaliteli_maddeler|Seçkin_maddeler",
+    "urwiki": "بہترین_مضامین|منتخب_مضامین",
+    "uzwiki": "Yaxshi_maqolalar|Tanlangan_maqolalar",
+    "viwiki": "Bài_viết_chất_lượng_tốt|Bài_viết_chọn_lọc",
+    "wuuwiki": "好文章|顶崭个文章",
+    "zh_yuewiki": "好文|正文",
+    "zhwiki": "優良條目|典范条目",
+    "adywiki": "Википедия:Избранные_статьи",
+    "afwiki": "Voorbladartikels",
+    "alswiki": "Wikipedia:Bsunders_glungener_Artikel",
+    "amwiki": "ምርጥ_ጽሑፎች",
+    "angwiki": "Fulgōd_ȝeƿritu",
+    "anwiki": "Articlos_destacaus",
+    "arzwiki": "مقالات_مختاره",
+    "aswiki": "নিৰ্বাচিত_প্ৰবন্ধ",
+    "avwiki": "Википедия:Жакъа_тІаса_бищараб_макъала",
+    "azbwiki": "سئچیلمیش_مقاله‌لر",
+    "barwiki": "Wikipedia:Berig",
+    "bat_smgwiki": "Vikipedėjės_pavīzdėnē_straipsnē",
+    "bawiki": "Википедия:Һайланған_мәҡәләләр",
+    "bclwiki": "Mga_napiling_artikulo",
+    "be_x_oldwiki": "Вікіпэдыя:Абраныя_артыкулы",
+    "bewiki": "Вікіпедыя:Выдатныя_артыкулы",
+    "bewwiki": "Makalah_gacoan",
+    "bhwiki": "बीछल_लेख",
+    "brwiki": "Pennadoù_eus_an_dibab",
+    "bswiki": "Istaknuti_članci",
+    "cawiki": "Llista_d'articles_de_qualitat",
+    "cdowiki": "Bō̤-céng_hō̤_ùng",
+    "cebwiki": "Mga_napiling_artikulo",
+    "cewiki": "Википеди:Хаьржина_йаззамаш",
+    "crhwiki": "Vikipediya:Nümüneviy_maqaleler",
+    "cswiki": "Wikipedie:Nejlepší_články",
+    "cvwiki": "Википеди:Суйласа_илнĕ_статьясем",
+    "cywiki": "Erthyglau_ddethol",
+    "dawiki": "Fremragende_artikler",
+    "dewiki": "Wikipedia:Exzellent",
+    "dvwiki": "Featured_Articles",
+    "eowiki": "Elstaraj_artikoloj",
+    "etwiki": "Eeskujulikud_artiklid",
+    "extwiki": "Endirguis_destacaus",
+    "fiwiki": "Suositellut_artikkelit",
+    "fowiki": "Mánaðargrein",
+    "frrwiki": "Wikipedia:Auer_a_miaten",
+    "fywiki": "Topside",
+    "gorwiki": "Tuladu_tulawoto",
+    "gvwiki": "Artyn_reiht",
+    "hewiki": "ערכים_מומלצים",
+    "hiwiki": "निर्वाचित_लेख",
+    "hsbwiki": "Ekscelentny",
+    "hywiki": "Վիքիպեդիա:Ընտրյալ_հոդվածներ",
+    "iawiki": "Wikipedia:Articulos_eminente",
+    "ilowiki": "Dagiti_napili_nga_artikulo",
+    "inhwiki": "Википеди:Хержа_статьяш",
+    "iowiki": "Artiklo_di_qualeso",
+    "itwiki": "Voci_in_vetrina",
+    "jamwiki": "Fiicha_aatikl",
+    "jvwiki": "Artikel_pethingan",
+    "kawiki": "რჩეული_სტატიები",
+    "kbdwiki": "Тхыгъэ_нэхъыфӀхэр",
+    "kkwiki": "Уикипедия:Алфавит_бойынша_таңдаулы_мақалалар",
+    "klwiki": "Anbefalet",
+    "koiwiki": "Википедия:Бур_гижӧттэз",
+    "krcwiki": "Википедия:Сайланнган_статьяла",
+    "kuwiki": "Gotarên_bijartî",
+    "kvwiki": "Википедия:Бур_гижӧдъяс",
+    "ladwiki": "Artikolos_valutosos",
+    "lawiki": "Paginae_mensis",
+    "lbewiki": "Википедия:Избранные_статьи",
+    "lezwiki": "Википедия:Хкягъай_макъала",
+    "lijwiki": "Vôxe_in_vedrìnn-a",
+    "liwiki": "Wikipedia:Sjterartikele",
+    "lmowiki": "Vus_in_vedrína",
+    "lowiki": "ບົດຄວາມດີເດັ່ນ",
+    "ltwiki": "Vikipedijos_pavyzdiniai_straipsniai",
+    "lvwiki": "Vērtīgi_raksti",
+    "maiwiki": "मुख्य_लेखसभ",
+    "mdfwiki": "Википедие:Лопалангот",
+    "mhrwiki": "Википедий:Сай_статья",
+    "minwiki": "Artikel_nan_Tapiliah",
+    "mkwiki": "Избрани_статии",
+    "mnwiki": "Википедиа:Онцлох_өгүүлэл",
+    "mrjwiki": "Википеди:Featured_on_MainPage",
+    "mtwiki": "Artikli_fil-vetrina",
+    "mwlwiki": "!Artigos_an_çtaque",
+    "myvwiki": "Википедиясь:Кочказь_лопат",
+    "ndswiki": "Wikipedia:Uns_Beste",
+    "newiki": "प्रमुख_लेखहरू",
+    "nlwiki": "Wikipedia:Etalage-artikelen",
+    "nnwiki": "Wikipedia/Gode_artiklar",
+    "novwiki": "Distinguiti_artikles",
+    "nowiki": "Utmerkede_artikler",
+    "olowiki": "Википедия:Избранные_статьи",
+    "omwiki": "Barruu_gaarii",
+    "orwiki": "ବଛା_ଲେଖା",
+    "oswiki": "Википеди:Хуыздæр_статьятæ",
+    "pawiki": "ਚੁਣਿਆ_ਹੋਇਆ_ਲੇਖ",
+    "pntwiki": "Βικιπαίδεια:Arthron",
+    "quwiki": "Wikipidiya:Kusa_qillqa",
+    "rowiki": "Articole_de_calitate",
+    "ruwiki": "Википедия:Избранные_статьи",
+    "sawiki": "निर्वाचितलेखः",
+    "scnwiki": "Articuli_n_vitrina",
+    "scwiki": "Artìculos_de_su_mese",
+    "sewiki": "Ávžžuhuvvon_artihkkalat_-prošeakta",
+    "simplewiki": "Very_good_articles",
+    "siwiki": "විශේෂාංග_ලිපි",
+    "slwiki": "Vsi_izbrani_članki",
+    "sqwiki": "Wikipedia:Artikuj_të_përkryer",
+    "srwiki": "Сјајни_чланци",
+    "stqwiki": "Gouldene_Artikkele",
+    "suwiki": "Artikel_petingan",
+    "svwiki": "Wikipedia:Utmärkta_artiklar",
+    "swwiki": "Makala_nzuri",
+    "szlwiki": "Wyrůżńůne_artikle",
+    "tawiki": "சிறப்புக்_கட்டுரைகள்",
+    "tlwiki": "Napiling_artikulo",
+    "tnwiki": "Featured_articles",
+    "ttwiki": "Сайланган_мәкаләләр",
+    "tyvwiki": "Википедия:Шилээн_чүүлдер",
+    "udmwiki": "Википедия:Быръем_статьяос",
+    "ukwiki": "Вікіпедія:Вибрані_статті",
+    "vecwiki": "Voxi_en_vetrina",
+    "vlswiki": "Wikipedia:Bofartikel",
+    "vowiki": "Yegeds_gudik",
+    "wawiki": "Raspepyîs_årtikes",
+    "yiwiki": "רעקאמענדירטע_ארטיקלען",
+    "yowiki": "Àwọn_àyọkà_pàtàkì",
+    "zh_classicalwiki": "卓著",
+}
+
+
+@app.route('/api/v1/exemplar-simple', methods=['GET'])
+def get_exemplar_based_categories():
+    lang, page_title, error = validate_api_args()
+    if error is not None:
+        return jsonify({'Error': error})
+    else:
+        categories = get_categories(page_title, lang)
+        exemplar_candidates = get_good_similar_articles(page_title, lang)
+        if categories:
+            exemplar = None
+            max_overlap = -1
+            for candidate in exemplar_candidates:
+                overlap = len(categories.intersection(set(candidate['categories']))) / len(categories)
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    exemplar = candidate['title']
+        elif exemplar_candidates:
+            exemplar = exemplar_candidates[0]
+        else:
+            exemplar_candidates = None
+        input = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
+                 'categories': list(categories)
+                 }
+        result = {
+                  'input': input,
+                  'exemplar': exemplar,
+                  'candidates': exemplar_candidates
+                  }
+        return jsonify(result)
 
 @app.route('/api/v1/exemplar', methods=['GET'])
 def get_morelike_details():
@@ -150,7 +352,7 @@ def get_details():
                   'details': [{'title':q[0], 'qual':q[1]} for q in qual_by_title]
                   }
         return jsonify(result)
-
+    
 def add_quality_data(links):
     title_qual = []
     with SqliteDict(os.path.join(__dir__, 'resources/quality.sqlite')) as qual_db:
@@ -178,6 +380,49 @@ def get_distribution(links):
     qual_dist = [(lbl, qual_dist[lbl]) for lbl in sorted(qual_dist, key=qual_dist.get, reverse=True)]
     return qual_dist
 
+
+def get_good_similar_articles(title, lang, limit=10):
+    """Gather set of up to `limit` links for an article."""
+    session = mwapi.Session(f'https://{lang}.wikipedia.org',
+                            user_agent=app.config['CUSTOM_UA'])
+
+    wiki = f'{lang}wiki'
+    if wiki in TOP_ARTICLE_CATEGORIES:
+        gsrsearch = f"morelikethis:{title.replace(' ', '_')} incategory:{TOP_ARTICLE_CATEGORIES[wiki]}"
+    else:
+        gsrsearch = f"morelike:{title.replace(' ', '_')}"
+
+    # https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=morelikethis%3ABedford%E2%80%93Nostrand_Avenues_station+incategory%3AFeatured_articles|Good_articles&prop=categories&gsrlimit=5&format=json&formatversion=2&clshow=!hidden&cllimit=max
+    result = session.get(
+            action="query",
+            generator="search",
+            gsrsearch=gsrsearch,
+            gsrwhat="text",
+            gsrnamespace=0,
+            gsrlimit=limit,
+            prop="categories",
+            clshow="!hidden",
+            cllimit="max",
+            format='json',
+            formatversion=2
+    )
+
+    # note: this query returns the pages out-of-order
+    # and we could reorder using the `index` parameter
+    # with each page but because we're limiting to 10,
+    # we're assuming that the relevance is high enough
+    # and the categories will be a better signal anyways
+    try:
+        exemplar_categories = []
+        for page in result['query']['pages']:
+            title = page['title']
+            relevance_idx = page['index']
+            categories = [cat['title'] for cat in page['categories']]
+            exemplar_categories.append({'title':title, 'idx':relevance_idx, 'categories':categories})
+            exemplar_categories = sorted(exemplar_categories, key=lambda x: x['idx'])
+        return exemplar_categories
+    except Exception:
+        return []
 
 def get_similar_articles(title, lang, limit=100):
     """Gather set of up to `limit` links for an article."""
@@ -286,6 +531,26 @@ def get_canonical_page_title(title, lang, session=None):
         return None
     else:
         return result['query']['pages'][0]['title']
+    
+def get_categories(page_title, lang):
+
+    # https://en.wikipedia.org/w/api.php?action=query&prop=categories&titles=Albert%20Einstein&cllimit=max&format=json&formatversion=2&clshow=!hidden
+    session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
+
+    result = session.get(
+        action="query",
+        prop="categories",
+        titles=page_title,
+        cllimit='max',
+        clshow='!hidden',
+        format='json',
+        formatversion=2
+    )
+    try:
+        return set(cat['title'] for cat in result['query']['pages'][0]['categories'])
+    except Exception:
+        return None
+
     
 def get_p31(qid):
     # https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=Q2479913&property=P31&format=json&formatversion=2&props
