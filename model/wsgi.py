@@ -1,4 +1,3 @@
-# Many thanks to: https://wikitech.wikimedia.org/wiki/Help:Toolforge/My_first_Flask_OAuth_tool
 import os
 import urllib.parse
 
@@ -200,22 +199,37 @@ def get_exemplar_based_categories():
         return jsonify({'Error': error})
     else:
         categories = get_categories(page_title, lang)
-        exemplar_candidates = get_good_similar_articles(page_title, lang)
+        article_ios = None
+        exemplar_candidates = get_good_similar_articles(page_title, lang, prop="categories")
+        exemplar = None
         if categories:
-            exemplar = None
-            max_overlap = -1
+            max_overlap = 0
             for candidate in exemplar_candidates:
                 overlap = len(categories.intersection(set(candidate['categories']))) / len(categories)
                 if overlap > max_overlap:
                     max_overlap = overlap
                     exemplar = candidate['title']
-        elif exemplar_candidates:
-            exemplar = exemplar_candidates[0]
-        else:
-            exemplar_candidates = None
+
+        if exemplar is None:
+            _, qid = get_page_ids(page_title, lang)
+            if qid:
+                article_ios = get_p31(qid)
+                if article_ios:
+                    exemplar_candidates = get_good_similar_articles(page_title, lang, prop="qid", limit=20)
+                    for candidate in exemplar_candidates:
+                        c_qid = candidate.get('qid')
+                        if c_qid:
+                            candidate_ios = get_p31(c_qid)
+                            if article_ios.intersection(candidate_ios):
+                                exemplar = candidate['title']
+                                break
+
         input = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
                  'categories': list(categories)
                  }
+        if article_ios:
+            input['qid'] = qid
+            input['instance-ofs'] = list(article_ios)
         result = {
                   'input': input,
                   'exemplar': exemplar,
@@ -381,7 +395,7 @@ def get_distribution(links):
     return qual_dist
 
 
-def get_good_similar_articles(title, lang, limit=10):
+def get_good_similar_articles(title, lang, prop="categories", limit=10):
     """Gather set of up to `limit` links for an article."""
     session = mwapi.Session(f'https://{lang}.wikipedia.org',
                             user_agent=app.config['CUSTOM_UA'])
@@ -393,19 +407,33 @@ def get_good_similar_articles(title, lang, limit=10):
         gsrsearch = f"morelike:{title.replace(' ', '_')}"
 
     # https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=morelikethis%3ABedford%E2%80%93Nostrand_Avenues_station+incategory%3AFeatured_articles|Good_articles&prop=categories&gsrlimit=5&format=json&formatversion=2&clshow=!hidden&cllimit=max
-    result = session.get(
-            action="query",
-            generator="search",
-            gsrsearch=gsrsearch,
-            gsrwhat="text",
-            gsrnamespace=0,
-            gsrlimit=limit,
-            prop="categories",
-            clshow="!hidden",
-            cllimit="max",
-            format='json',
-            formatversion=2
-    )
+    if prop == "categories":
+        result = session.get(
+                action="query",
+                generator="search",
+                gsrsearch=gsrsearch,
+                gsrwhat="text",
+                gsrnamespace=0,
+                gsrlimit=limit,
+                prop="categories",
+                clshow="!hidden",
+                cllimit="max",
+                format='json',
+                formatversion=2
+        )
+    else:
+        result = session.get(
+                action="query",
+                generator="search",
+                gsrsearch=gsrsearch,
+                gsrwhat="text",
+                gsrnamespace=0,
+                gsrlimit=limit,
+                prop="pageprops",
+                ppprop="wikibase_item",
+                format='json',
+                formatversion=2
+        )
 
     # note: this query returns the pages out-of-order
     # and we could reorder using the `index` parameter
@@ -415,11 +443,17 @@ def get_good_similar_articles(title, lang, limit=10):
     try:
         exemplar_categories = []
         for page in result['query']['pages']:
-            title = page['title']
-            relevance_idx = page['index']
-            categories = [cat['title'] for cat in page['categories']]
-            exemplar_categories.append({'title':title, 'idx':relevance_idx, 'categories':categories})
-            exemplar_categories = sorted(exemplar_categories, key=lambda x: x['idx'])
+            # mostly unnecessary check but why not
+            if page['ns'] == 0 and 'missing' not in page:
+                row = {'title':page['title'], 'idx':page['index']}
+                if prop == "categories":
+                    categories = [cat['title'] for cat in page['categories']]
+                    row['categories'] = categories
+                else:
+                    qid = page.get('pageprops', {}).get('wikibase_item')
+                    row['qid'] = qid
+                exemplar_categories.append(row)
+        exemplar_categories = sorted(exemplar_categories, key=lambda x: x['idx'])
         return exemplar_categories
     except Exception:
         return []
@@ -554,7 +588,7 @@ def get_categories(page_title, lang):
     
 def get_p31(qid):
     # https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=Q2479913&property=P31&format=json&formatversion=2&props
-    session = mwapi.Session(f'https://www.wikidata.org', user_agent='isaac@wikimedia.org')#app.config['CUSTOM_UA'])
+    session = mwapi.Session(f'https://www.wikidata.org', app.config['CUSTOM_UA'])
     instance_ofs = set()
     try:
         result = session.get(
