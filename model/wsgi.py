@@ -1,3 +1,4 @@
+from collections import Counter
 import os
 import urllib.parse
 
@@ -203,12 +204,30 @@ def get_exemplar_based_categories():
         exemplar_candidates = get_good_similar_articles(page_title, lang, prop="categories")
         exemplar = None
         if categories:
-            max_overlap = 0
+            max_overlap = 0.25
             for candidate in exemplar_candidates:
                 overlap = len(categories.intersection(set(candidate['categories']))) / len(categories)
                 if overlap > max_overlap:
                     max_overlap = overlap
                     exemplar = candidate['title']
+
+        if exemplar is None:
+            print("Category word overlap")
+            max_overlap = 0.5
+            category_words = Counter()
+            for cat in categories:
+                category_words.update(cat.split())
+            num_category_words = sum(category_words.values())
+            print(category_words)
+            for candidate in exemplar_candidates:
+                exemplar_words = Counter()
+                for cat in candidate['categories']:
+                    exemplar_words.update(cat.split())
+                overlap = sum((category_words & exemplar_words).values()) / num_category_words
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    exemplar = candidate['title']
+                print(candidate, overlap, exemplar_words)
 
         if exemplar is None:
             _, qid = get_page_ids(page_title, lang)
@@ -447,7 +466,7 @@ def get_good_similar_articles(title, lang, prop="categories", limit=10):
             if page['ns'] == 0 and 'missing' not in page:
                 row = {'title':page['title'], 'idx':page['index']}
                 if prop == "categories":
-                    categories = [cat['title'] for cat in page['categories']]
+                    categories = [cat['title'][cat['title'].find(":")+1:] for cat in page['categories']]
                     row['categories'] = categories
                 else:
                     qid = page.get('pageprops', {}).get('wikibase_item')
@@ -581,7 +600,7 @@ def get_categories(page_title, lang):
         formatversion=2
     )
     try:
-        return set(cat['title'] for cat in result['query']['pages'][0]['categories'])
+        return set(cat['title'][cat['title'].find(":")+1:] for cat in result['query']['pages'][0]['categories'])
     except Exception:
         return None
 
