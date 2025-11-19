@@ -5,8 +5,7 @@ import urllib.parse
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-#EMB_DIR = '/etc/api-endpoint'
-EMB_DIR = './'
+EMB_DIR = '/etc/api-endpoint'
 os.environ['HF_HOME'] = EMB_DIR
 
 from flask import Flask, request, jsonify
@@ -69,13 +68,13 @@ def get_wikipedia_search_results(query, result_depth=5):
     result = {'all-help-policy': [], 'policies': [], 'guidelines': []}
     params["srsearch"] = query
     for article in query_search_api(base_url, params):
-        result['all-help-policy'].append({'title': f"https://en.wikipedia.org/wiki/{article.replace(' ', '_')}"})
+        result['all-help-policy'].append({'title': article.replace(' ', '_')})
     params["srsearch"] = f'incategory:"Wikipedia policies" {query}'
     for article in query_search_api(base_url, params):
-        result['policies'].append({'title': f"https://en.wikipedia.org/wiki/{article.replace(' ', '_')}"})
+        result['policies'].append({'title': article.replace(' ', '_')})
     params["srsearch"] = f'deepcat:"Wikipedia guidelines" {query}'
     for article in query_search_api(base_url, params):
-        result['guidelines'].append({'title': f"https://en.wikipedia.org/wiki/{article.replace(' ', '_')}"})
+        result['guidelines'].append({'title': article.replace(' ', '_')})
 
     return result
 
@@ -103,7 +102,7 @@ def query_embeddings(query, result_depth=5):
 
         top = np.argsort(sims)[-result_depth:][::-1]
         for idx in top:
-            result[corpus_type].append({'title': f"https://en.wikipedia.org/wiki/{EMBS[corpus_type]['metadata'][idx]}",
+            result[corpus_type].append({'title': EMBS[corpus_type]['metadata'][idx],
                                         'score': float(sims[idx])})
     return result
 
