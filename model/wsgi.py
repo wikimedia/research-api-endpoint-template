@@ -1,11 +1,14 @@
 from collections import Counter
+import json
 import os
 import urllib.parse
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import mwapi
-from sqlitedict import SqliteDict
+from mwparserfromhtml import Article
+import requests
+import tldextract
 import yaml
 
 app = Flask(__name__)
@@ -336,82 +339,6 @@ def get_page_ids(title, lang):
         return (result['query']['pages'][0]['pageid'], result['query']['pages'][0].get('pageprops', {}).get('wikibase_item'))
 
 
-def add_quality_data_morelike(links):
-    title_qual = []
-    with SqliteDict(os.path.join(__dir__, 'resources/quality.sqlite')) as qual_db:
-        for title in links:
-            try:
-                article_id, qid = links[title]
-                q = qual_db[article_id]  # get qual score
-                title_qual.append((title, qid, q))
-            except KeyError:
-                continue
-
-    return title_qual
-
-
-def qual_to_cat(q):
-    if q <= 0.36:
-        return 'Stub'
-    elif q <= 0.54:
-        return 'Start'
-    elif q <= 0.65:
-        return 'C-class'
-    elif q <= 0.78:
-        return 'B-class'
-    elif q <= 0.88:
-        return 'GA'
-    elif q <= 1:
-        return 'FA'
-    else:
-        return None
-
-
-@app.route('/api/v1/outlinks-details', methods=['GET'])
-@app.route('/api/v1/details', methods=['GET'])
-def get_details():
-    """Get gender distribution details (individual links and aggregate stats) for links to/from an article."""
-    lang, page_title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'Error': error})
-    else:
-        links = get_links(page_title, lang, verbose=True)
-        qual_by_title = add_quality_data(links)
-        qual_dist = get_distribution(set(links.values()))
-        num_links = len(links)
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/{page_title.replace(" ", "_")}',
-                  'num_links': num_links,
-                  'summary': [{'qual': q[0], 'num_links': q[1], 'pct_links':q[1] / num_links} for q in qual_dist],
-                  'details': [{'title':q[0], 'qual':q[1]} for q in qual_by_title]
-                  }
-        return jsonify(result)
-    
-def add_quality_data(links):
-    title_qual = []
-    with SqliteDict(os.path.join(__dir__, 'resources/quality.sqlite')) as qual_db:
-        for title, article_id in links.items():
-            try:
-                q = qual_db[article_id]  # get qual score
-                title_qual.append((title, q))
-            except KeyError:
-                continue
-
-    return title_qual
-
-def get_distribution(links):
-    """Get fastText model predictions for an input feature string."""
-    qual_dist = {}
-    with SqliteDict(os.path.join(__dir__, 'resources/quality.sqlite')) as qual_db:
-        for article_id in links:
-            try:
-                g = qual_db[article_id]  # get qual score
-                gc = qual_to_cat(g)
-                qual_dist[gc] = qual_dist.get(gc, 0) + 1
-            except KeyError:
-                continue
-
-    qual_dist = [(lbl, qual_dist[lbl]) for lbl in sorted(qual_dist, key=qual_dist.get, reverse=True)]
-    return qual_dist
 
 
 def get_good_similar_articles(title, lang, prop="categories", limit=10):
@@ -513,58 +440,7 @@ def get_similar_articles(title, lang, limit=100):
     except Exception:
         return {}
 
-def get_links(title, lang, limit=1500, session=None, verbose=False):
-    """Gather set of up to `limit` links for an article."""
-    if session is None:
-        session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
 
-    # generate list of all out/inlinks (to namespace 0) from the article and their associated Wikidata IDs
-    result = session.get(
-            action="query",
-            generator="links",
-            titles=title,
-            redirects='',
-            prop='pageprops',
-            ppprop='none',
-            gplnamespace=0,  # this actually doesn't seem to work :/
-            gpllimit=50,
-            format='json',
-            formatversion=2,
-            continuation=True
-    )
-
-    try:
-        if verbose:
-            link_article_ids = {}
-            redirects = {}
-            for r in result:
-                for rd in r['query'].get('redirects', []):
-                    redirects[rd['to']] = rd['from']
-                for link in r['query']['pages']:
-                    if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
-                        pid = link['pageid']
-                        title = link['title']
-                        article_id = f'{lang}wiki-{pid}'
-                        link_article_ids[title.lower()] = article_id
-                        # if redirect, add in both forms because the link might be present in both forms too
-                        if title in redirects:
-                            link_article_ids[redirects.get(title).lower()] = article_id
-                if len(link_article_ids) > limit:
-                    break
-            return link_article_ids
-        else:
-            link_article_ids = set()
-            for r in result:
-                for link in r['query']['pages']:
-                    if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
-                        pid = link['pageid']
-                        article_id = f'{lang}wiki-{pid}'
-                        link_article_ids.add(article_id)
-                if len(link_article_ids) > limit:
-                    break
-            return link_article_ids
-    except Exception:
-        return {}
 
 def get_canonical_page_title(title, lang, session=None):
     """Resolve redirects / normalization -- used to verify that an input page_title exists"""
@@ -645,6 +521,230 @@ def validate_api_args():
     return lang, page_title, error
 
 application = app
+
+
+def build_list_of_template_names(article):
+    templates = {}
+    for t in article.wikistew.tag.find_all(lambda x: x.attrs['about'].startswith("#mwt") and x.has_attr('data-mw') if x.has_attr('about') else False):
+        template_id = t.attrs['about']
+        template_parts = json.loads(t['data-mw']).get('parts')
+        try:
+            main = template_parts[0]['template']
+            template_name = main['target']['wt'].strip()
+            templates[template_id] = template_name
+        except Exception:
+            continue
+    return templates
+
+
+def get_template_id(tag):
+    # find template ID for tag -- might be on a parent
+    if tag.has_attr("about") and tag["about"].startswith("#mwt"):
+        return tag["about"]
+    for p in tag.parents:
+        if p.has_attr("about") and p["about"].startswith("#mwt"):
+            return p["about"]
+    return ""
+
+
+def extract_features(page_html):
+    try:
+        article = Article(page_html)
+        features = {}
+        templates = build_list_of_template_names(article)
+
+        features['external-domains'] = set()
+        for el in article.wikistew.get_externallinks():
+            url = el.link
+            tld = tldextract.extract(url)
+            if 'archive' in tld.domain:
+                path = urllib.parse.urlparse(url).path
+                start_of_archived_url = path.find('http')
+                if start_of_archived_url != -1:
+                    url = path[start_of_archived_url:]
+                tld = tldextract.extract(url)
+            # normalize down (drop subdomains/params)
+            # e.g., https://books.google.com/etc -> google.com
+            url = f'{tld.domain}.{tld.suffix}'
+            features['external-domains'].add(url)
+
+        features['infoboxes'] = set()
+        for infobox in article.wikistew.get_infobox():
+            infobox_tid = get_template_id(infobox.html_tag)
+            if infobox_tid:
+                infobox_template_name = templates.get(infobox_tid)
+                if infobox_template_name:
+                    features['infoboxes'].add(infobox_template_name)
+
+        features['categories'] = set()
+        for category in article.wikistew.get_categories():
+            if not category.is_transcluded():
+                features['categories'].add(category.title)
+
+        features['navboxes'] = set()
+        for navbox in article.wikistew.get_nav_boxes():
+            navbox_tid = get_template_id(navbox.html_tag)
+            if navbox_tid:
+                navbox_template_name = templates.get(navbox_tid)
+                if navbox_template_name:
+                    features['navboxes'].add(navbox_template_name)
+
+        features['headings'] = set()
+        for heading in article.wikistew.get_headings():
+            features['headings'].add(heading.title)
+
+        return features
+
+    except Exception:
+        return None
+
+def get_html(lang, title):
+    # https://en.wikipedia.org/w/rest.php/v1/page/Cedar_Fire/html
+    try:
+        encoded_title = urllib.parse.quote_plus(title.replace(" ", "_"))
+        r = requests.get(f'https://{lang}.wikipedia.org/w/rest.php/v1/page/{encoded_title}/html',
+                         headers={'User-Agent': 'isaacj@wikimedia.org - maybe-add-this'})
+        html = r.text
+        return html
+    except Exception:
+        return None
+
+@app.route('/maybe-add-this-html') 
+def recommend_things_html_based():
+    lang = None
+    if 'lang' in request.args:    
+        lang = request.args['lang'].lower()
+
+    title = None
+    if 'title' in request.args:
+        title = request.args['title'].replace('_', ' ')
+    elif 'page_title' in request.args:
+        title = request.args['page_title'].replace('_', ' ')
+    
+    similar_pages = None
+    if 'strict' in request.args:
+        similar_pages = list(get_similar_articles(title, lang, limit=20, pid=False))
+    if not similar_pages:
+        # https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=Nelson%20Mandela&utf8=&format=json
+        base_url = f"https://{lang}.wikipedia.org/w/api.php"
+        params = {
+                "action": "query",
+                "list": "search",
+                "srwhat": "text",
+                "srnamespace": 0,
+                "srsearch": f"morelike:{title}",
+                "srlimit": 10,
+                "srprop": "",
+                "format": "json",
+                "formatversion": 2
+        }
+        result = requests.get(base_url, params=params, headers={'User-Agent': app.config['CUSTOM_UA']}).json()
+        similar_pages = []
+        for page in result['query']['search']:
+            similar_pages.append(page['title'])
+
+    source_html = get_html(lang, title)
+    source_features = extract_features(source_html)
+    similar_features = {k:Counter() for k in source_features}
+    if similar_pages:
+        for page in similar_pages:
+            page_html = get_html(lang, page)
+            page_features = extract_features(page_html)
+            for element_type in page_features:
+                similar_features[element_type].update(page_features[element_type])
+
+    recommendations = {}
+    for element_type in similar_features:
+        recommendations[element_type] = []
+        if element_type == 'infobox' and source_features['infobox']:
+            continue
+        for element, evidence in similar_features[element_type].most_common():
+            if element not in source_features[element_type] and evidence > 1:
+                recommendations[element_type].append({'rec': element, 'pages-using': evidence})
+
+    result = {'lang':lang, 'title':title, 'pages-checked':similar_pages,
+              'recommendations': recommendations}
+    return result
+
+def get_similar_articles(title, lang, limit=20, pid=True):
+    """Gather set of up to `limit` links for an article."""
+
+    base_url = f"https://{lang}.wikipedia.org/w/api.php"
+    params = {
+        'action': "query",
+        'prop': "pageprops",
+        'ppprop': 'wikibase_item',
+        'redirects': '',
+        'titles': title,
+        'format': 'json',
+        'formatversion': 2 
+    }
+    result = requests.get(base_url, params=params, headers={'User-Agent': app.config['CUSTOM_UA']}).json()
+        
+    if 'missing' in result['query']['pages'][0]:
+        return None
+    
+    qid = result['query']['pages'][0].get('pageprops', {}).get('wikibase_item')
+    if not qid:
+        return None
+    article_ios = get_p31(qid)
+    if not article_ios:
+        return None
+    base_url = f"https://{lang}.wikipedia.org/w/api.php"
+    params = {
+            "action": "query",
+            "generator": "search",
+            "redirects": '',
+            "prop": "pageprops",
+            "ppprop": "wikibase_item",
+            "gsrwhat": "text",
+            "gsrnamespace": 0,
+            "gsrsearch": f"morelike:{title}",
+            "gsrlimit": limit,
+            "format": 'json',
+            "formatversion": 2
+    }
+    result = requests.get(base_url, params=params, headers={'User-Agent': app.config['CUSTOM_UA']}).json()
+
+    pids_to_keep = set()
+    try:
+        for link in result['query']['pages']:
+            if link['ns'] == 0 and 'missing' not in link:  # namespace 0 and not a red link
+                qid = link.get('pageprops', {}).get('wikibase_item')
+                if qid:
+                    morelike_ios = get_p31(qid)
+                    if article_ios.intersection(morelike_ios):
+                        if pid:
+                            pid = link['pageid']
+                            pids_to_keep.add(pid)
+                        else:
+                            title = link['title']
+                            pids_to_keep.add(title)
+    except Exception:
+        return None
+    return pids_to_keep
+
+
+def get_p31(qid):
+    # https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=Q2479913&property=P31&format=json&formatversion=2&props
+    base_url = "https://www.wikidata.org/w/api.php"
+    params = {
+        'action': "wbgetclaims",
+        'entity': qid,
+        'property': 'P31',
+        'format': 'json',
+        'formatversion': 2
+    }
+    result = requests.get(base_url, params=params, headers={'User-Agent': app.config['CUSTOM_UA']}).json()
+    instance_ofs = set()
+    try:
+        for claim in result['claims']['P31']:
+            io = claim['mainsnak']['datavalue']['value']['id']
+            if io:
+                instance_ofs.add(io)
+        return instance_ofs
+    except Exception:
+        return instance_ofs
 
 if __name__ == '__main__':
     application.run()

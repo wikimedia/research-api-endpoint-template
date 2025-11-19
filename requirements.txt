@@ -2,5 +2,6 @@ Flask
 Flask-Cors
 mwapi
 PyYAML
-sqlitedict
+requests
+tldextract
 uWSGI
