@@ -29,8 +29,7 @@ pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."
-cp ${TMP_PATH}/${GIT_BRANCH}/model/config/gunicorn.conf.py ${ETC_PATH}
-cp ${TMP_PATH}/${GIT_BRANCH}/model/wsgi.py ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/main.py ${ETC_PATH}
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then

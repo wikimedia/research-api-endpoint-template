@@ -1,57 +1,64 @@
+from contextlib import asynccontextmanager
 import logging
 import os
 import pickle
 import urllib.parse
 
-# where nearest neighbor index and models will go
+# where models will go
 # must be set before library imports
-EMB_DIR = '/etc/api-endpoint'
+EMB_DIR = './' # '/etc/api-endpoint'
 os.environ['HF_HOME'] = EMB_DIR
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import requests
 from sentence_transformers import SentenceTransformer
 
-app = Flask(__name__)
-
-__dir__ = os.path.dirname(__file__)
-
-# load in app user-agent or any other app config
-app.json.sort_keys = False
 UA = 'isaac@wikimedia.org -- mentor prototype'
-
-# Enable CORS for API endpoints
-cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
-
-emb_model_name = 'Qwen/Qwen3-Embedding-0.6B'
-EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
-
+EMD_MODEL_NAME = 'Qwen/Qwen3-Embedding-0.6B'
+EMB_MODEL = SentenceTransformer(EMD_MODEL_NAME, cache_folder=EMB_DIR)
 EMBS = {}
+MODEL_INFO = {'embeddings': EMD_MODEL_NAME, 'nearest-neighbor': 'brute-force'}
 
-MODEL_INFO = {'embeddings': emb_model_name, 'nearest-neighbor': 'brute-force'}
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load in embeddings."""
+    global EMBS
+    embs_fn = os.path.join(EMB_DIR, "page-embeddings.pkl")
+    logger.info("Loading in embeddings!")
+    with open(embs_fn, 'rb') as fin:
+        EMBS = pickle.load(fin)
 
-@app.route('/api/models', methods=['GET'])
+    for corpus_type in EMBS:
+        logger.info(f"{corpus_type}: {len(EMBS[corpus_type]['metadata'])} documents.")
+    
+    yield
+    EMBS.clear()
+
+app = FastAPI(lifespan=lifespan)
+# Enable CORS for API endpoints
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_headers=["*"],
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.get('/models')
 def get_models():
-    return jsonify({'models': MODEL_INFO})
+    return {'models': MODEL_INFO}
 
-@app.route('/api/search-help', methods=['GET'])
-def search_help():
+@app.get('/search/')
+def search_help(query: str, k: int = 5):
     """Natural language search of technical documentation."""
-    query = request.args.get('query')
-    try:
-        k = int(request.args.get('k'))
-    except Exception:
-        k = 5
-    if not query:
-        return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
-    else:
-        query = urllib.parse.unquote_plus(query)
-        result = {'query': query, 'results': {}}
-        result['results']['natural-language'] = query_embeddings(query, result_depth=k)
-        result['results']['wikipedia-search'] = get_wikipedia_search_results(query, result_depth=k)
-        return jsonify(result)
+    query = urllib.parse.unquote_plus(query)
+    result = {'query': query, 'results': {}}
+    result['results']['natural-language'] = query_embeddings(query, result_depth=k)
+    result['results']['wikipedia-search'] = get_wikipedia_search_results(query, result_depth=k)
+    return result
 
 def get_wikipedia_search_results(query, result_depth=5):
     # https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=How%20do%20I%20add%20an%20infobox?&format=json&srwhat=text&srprop=&formatversion=2&srnamespace=4|12
@@ -106,22 +113,5 @@ def query_embeddings(query, result_depth=5):
                                         'score': float(sims[idx])})
     return result
 
-def load_embeddings():
-    """Load in embeddings."""
-    global EMBS
-    embs_fn = os.path.join(EMB_DIR, "page-embeddings.pkl")
-    print("Loading in embeddings!")
-    with open(embs_fn, 'rb') as fin:
-        EMBS = pickle.load(fin)
-
-    for corpus_type in EMBS:
-        print(f"{corpus_type}: {len(EMBS[corpus_type]['metadata'])} documents.")
-
-load_embeddings()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run()
-else:
-    gunicorn_logger = logging.getLogger('gunicorn.error')
-    app.logger.handlers = gunicorn_logger.handlers
-    app.logger.setLevel(gunicorn_logger.level)

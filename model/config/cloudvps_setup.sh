@@ -44,7 +44,7 @@ git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
 
 echo "Installing repositories..."
 pip install wheel
-pip install gunicorn[gevent]
+pip install "fastapi[standard]"
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
@@ -58,8 +58,7 @@ chown -R www-data:www-data ${LOG_PATH}
 chown -R www-data:www-data ${LIB_PATH}
 
 echo "Copying configuration files..."
-cp ${TMP_PATH}/${GIT_BRANCH}/model/config/gunicorn.conf.py ${ETC_PATH}
-cp ${TMP_PATH}/${GIT_BRANCH}/model/wsgi.py ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/main.py ${ETC_PATH}
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
