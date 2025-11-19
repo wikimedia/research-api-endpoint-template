@@ -1,9 +1,5 @@
-annoy
 Flask
 Flask-Cors
-mwedittypes
-mwparserfromhell
+numpy
 requests
-PyYAML
 sentence-transformers
-transformers

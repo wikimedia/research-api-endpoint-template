@@ -1,158 +1,124 @@
 import logging
 import os
 import pickle
+import urllib.parse
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-EMB_DIR = '/etc/api-endpoint'
-os.environ['TRANSFORMERS_CACHE'] = EMB_DIR
+#EMB_DIR = '/etc/api-endpoint'
+EMB_DIR = './'
+os.environ['HF_HOME'] = EMB_DIR
 
-from annoy import AnnoyIndex
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from mwedittypes.utils import wikitext_to_plaintext
-import mwparserfromhell
+import numpy as np
 import requests
 from sentence_transformers import SentenceTransformer
-from transformers import pipeline
-import yaml
 
 app = Flask(__name__)
 
 __dir__ = os.path.dirname(__file__)
 
 # load in app user-agent or any other app config
-app.config.update(
-    yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
+app.json.sort_keys = False
+UA = 'isaac@wikimedia.org -- mentor prototype'
 
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
 
-emb_model_name = 'sentence-transformers/all-mpnet-base-v2'
+emb_model_name = 'Qwen/Qwen3-Embedding-0.6B'
 EMB_MODEL = SentenceTransformer(emb_model_name, cache_folder=EMB_DIR)
-ANNOY_INDEX = AnnoyIndex(768, 'angular')
-IDX_TO_SECTION = []
 
-qa_model_name = "deepset/tinyroberta-squad2"
-QA_MODEL = pipeline('question-answering', model=qa_model_name, tokenizer=qa_model_name)
+EMBS = {}
 
-MODEL_INFO = {'q&a':qa_model_name, 'emb':emb_model_name}
+MODEL_INFO = {'embeddings': emb_model_name, 'nearest-neighbor': 'brute-force'}
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
     return jsonify({'models': MODEL_INFO})
 
-@app.route('/api/wikitech-search', methods=['GET'])
-def search_wikitext():
+@app.route('/api/search-help', methods=['GET'])
+def search_help():
     """Natural language search of technical documentation."""
     query = request.args.get('query')
+    try:
+        k = int(request.args.get('k'))
+    except Exception:
+        k = 5
     if not query:
         return jsonify({'error': 'query parameter with natural-language search query must be provided.'})
     else:
-        inputs = get_inputs(query, result_depth=3)
-        answer = get_answer(query, [i['text'] for i in inputs])
-        result = {'query': query, 'search-results':inputs, 'answer':answer}
+        query = urllib.parse.unquote_plus(query)
+        result = {'query': query, 'results': {}}
+        result['results']['natural-language'] = query_embeddings(query, result_depth=k)
+        result['results']['wikipedia-search'] = get_wikipedia_search_results(query, result_depth=k)
         return jsonify(result)
 
+def get_wikipedia_search_results(query, result_depth=5):
+    # https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=How%20do%20I%20add%20an%20infobox?&format=json&srwhat=text&srprop=&formatversion=2&srnamespace=4|12
+    base_url = "https://en.wikipedia.org/w/api.php"
+    params = {"action": "query",
+              "list": "search",
+              "format": "json",
+              "srwhat": "text",
+              "srprop": "",
+              "srlimit": result_depth,
+              "formatversion": 2,
+              "srnamespace": "4|12"}
+    
+    result = {'all-help-policy': [], 'policies': [], 'guidelines': []}
+    params["srsearch"] = query
+    for article in query_search_api(base_url, params):
+        result['all-help-policy'].append({'title': f"https://en.wikipedia.org/wiki/{article.replace(' ', '_')}"})
+    params["srsearch"] = f'incategory:"Wikipedia policies" {query}'
+    for article in query_search_api(base_url, params):
+        result['policies'].append({'title': f"https://en.wikipedia.org/wiki/{article.replace(' ', '_')}"})
+    params["srsearch"] = f'deepcat:"Wikipedia guidelines" {query}'
+    for article in query_search_api(base_url, params):
+        result['guidelines'].append({'title': f"https://en.wikipedia.org/wiki/{article.replace(' ', '_')}"})
 
-def get_wikitext(title, domain='wikitech.wikimedia'):
-    """Get wikitext for an article."""
-    try:
-        base_url = f"https://{domain}.org/w/api.php"
-        params = {
-            "action": "query",
-            "prop": "revisions",
-            "titles": title.split('#', maxsplit=1)[0],
-            "rvslots": "*",
-            "rvprop": "content",
-            "rvdir": "older",
-            "rvlimit": 1,
-            "format": "json",
-            "formatversion": 2
-        }
-        r = requests.get(url=base_url,
-                         params=params,
-                         headers={'User-Agent': app.config['CUSTOM_UA']})
-        rj = r.json()
-        return rj['query']['pages'][0]['revisions'][0]['slots']['main']['content']
-    except Exception:
-        return None
-
-
-def get_section_plaintext(title, wikitext):
-    """Convert section wikitext into plaintext.
-
-    This does a few things:
-    * Excludes certain types of nodes -- e.g., references, templates.
-    * Strips wikitext syntax -- e.g., all the brackets etc.
-    ."""
-    try:
-        section = title.split('#', maxsplit=1)[1]
-        for s in mwparserfromhell.parse(wikitext).get_sections(flat=True):
-            try:
-                header = s.filter_headings()[0].title.strip().replace(' ', '_')
-                if header == section:
-                    return wikitext_to_plaintext(s)
-            except Exception:
-                continue
-    except Exception:
-        # default to first section if no section in title
-        return wikitext_to_plaintext(mwparserfromhell.parse(wikitext).get_sections(flat=True)[0])
+    return result
 
 
-def get_answer(query, context):
-    """Run Q&A model to extract best answer to query."""
-    qa_input = {
-        'question': query,
-        'context': '\n'.join(context)  # maybe reverse inputs?
-    }
-    try:
-        res = QA_MODEL(qa_input)
-        return res['answer']
-    except Exception:
-        return None
+def query_search_api(base_url, params):
+    response = requests.get(base_url, params=params,
+                            headers={'User-Agent': UA,
+                                     'Host': 'en.wikipedia.org'})
+    result = response.json()
+    articles = []
+    for page in result.get('query', {}).get('search', []):
+        title = page.get('title')
+        if title:
+            articles.append(title)
+    return articles
 
+def query_embeddings(query, result_depth=5):
+    embedding = EMB_MODEL.encode_query(query)
+    result = {}
+    for corpus_type in EMBS:
+        result[corpus_type] = []
+        sims = []
+        for idx, item in enumerate(EMBS[corpus_type]['embeddings']):
+            sims.append(np.dot(embedding, item))
 
-def get_inputs(query, result_depth=3):
-    """Build inputs to Q&A model for query."""
-    embedding = EMB_MODEL.encode(query)
-    nns = ANNOY_INDEX.get_nns_by_vector(embedding, result_depth, search_k=-1, include_distances=True)
-    results = []
-    for i in range(result_depth):
-        idx = nns[0][i]
-        score = 1 - nns[1][i]
-        title = IDX_TO_SECTION[idx]
-        try:
-            wt = get_wikitext(title)
-            pt = get_section_plaintext(title, wt).strip()
-            results.append({'title':title, 'score':score, 'text':pt})
-        except Exception:
-            continue
+        top = np.argsort(sims)[-result_depth:][::-1]
+        for idx in top:
+            result[corpus_type].append({'title': f"https://en.wikipedia.org/wiki/{EMBS[corpus_type]['metadata'][idx]}",
+                                        'score': float(sims[idx])})
+    return result
 
-    return results
+def load_embeddings():
+    """Load in embeddings."""
+    global EMBS
+    embs_fn = os.path.join(EMB_DIR, "page-embeddings.pkl")
+    print("Loading in embeddings!")
+    with open(embs_fn, 'rb') as fin:
+        EMBS = pickle.load(fin)
 
-def load_similarity_index():
-    """Load in nearest neighbor index and labels."""
-    global IDX_TO_SECTION
-    index_fp = os.path.join(EMB_DIR, 'embeddings.ann')
-    labels_fp = os.path.join(EMB_DIR, 'section_to_idx.pickle')
-    print("Using pre-built ANNOY index")
-    ANNOY_INDEX.load(index_fp)
-    with open(labels_fp, 'rb') as fin:
-        IDX_TO_SECTION = pickle.load(fin)
-    print(f"{len(IDX_TO_SECTION)} passages in nearest neighbor index.")
+    for corpus_type in EMBS:
+        print(f"{corpus_type}: {len(EMBS[corpus_type]['metadata'])} documents.")
 
-def test():
-    query = 'what is toolforge?'
-    print('getting inputs.')
-    inputs = get_inputs(query, result_depth=3)
-    print('getting answer.')
-    answer = get_answer(query, [i['text'] for i in inputs])
-    result = {'query': query, 'search-results': inputs, 'answer': answer, 'models': MODEL_INFO}
-    print(result)
-
-load_similarity_index()
-test()
+load_embeddings()
 
 if __name__ == '__main__':
     app.run()
