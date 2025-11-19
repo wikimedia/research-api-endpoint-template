@@ -5,8 +5,8 @@
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='mentorship-search'
-ANNOY_EMB_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/mentorship/page-embeddings-qwen-03b.pkl'
-ANNOY_EMB_FN='page-embeddings.pkl'
+MODEL_EMB_URL='https://analytics.wikimedia.org/published/datasets/one-off/isaacj/mentorship/page-embeddings-qwen-03b.pkl'
+MODEL_EMB_FN='page-embeddings.pkl'
 
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 SRV_PATH="/srv/${APP_LBL}"  # application resources for serving endpoint
@@ -49,7 +49,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 echo "Downloading index files..."
-wget -O ${ETC_PATH}/${ANNOY_EMB_FN} ${ANNOY_EMB_URL}
+wget -O ${ETC_PATH}/${MODEL_EMB_FN} ${MODEL_EMB_URL}
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
@@ -60,7 +60,6 @@ chown -R www-data:www-data ${LIB_PATH}
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/gunicorn.conf.py ${ETC_PATH}
 cp ${TMP_PATH}/${GIT_BRANCH}/model/wsgi.py ${ETC_PATH}
-cp ${TMP_PATH}/${GIT_BRANCH}/model/flask_config.yaml ${ETC_PATH}
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then

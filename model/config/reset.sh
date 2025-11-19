@@ -18,7 +18,6 @@ git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/gunicorn.conf.py ${ETC_PATH}
 cp ${TMP_PATH}/${GIT_BRANCH}/model/wsgi.py ${ETC_PATH}
-cp ${TMP_PATH}/${GIT_BRANCH}/model/flask_config.yaml ${ETC_PATH}
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
 cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
