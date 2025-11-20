@@ -67,12 +67,12 @@ def get_wikipedia_search_results(query, result_depth=5):
               "list": "search",
               "format": "json",
               "srwhat": "text",
-              "srprop": "",
+              "srprop": "sectiontitle",
               "srlimit": result_depth,
               "formatversion": 2,
               "srnamespace": "4|12"}
     
-    result = {'all-help-policy': [], 'policies': [], 'guidelines': []}
+    result = {'all-help-policy': [], 'policies': [], 'guidelines': [], 'teahouse': []}
     params["srsearch"] = query
     for article in query_search_api(base_url, params):
         result['all-help-policy'].append({'title': article.replace(' ', '_')})
@@ -82,6 +82,9 @@ def get_wikipedia_search_results(query, result_depth=5):
     params["srsearch"] = f'deepcat:"Wikipedia guidelines" {query}'
     for article in query_search_api(base_url, params):
         result['guidelines'].append({'title': article.replace(' ', '_')})
+    params["srsearch"] = f'{query} prefix:"Wikipedia:Teahouse/Questions/Archive"'
+    for article in query_search_api(base_url, params):
+        result['teahouse'].append({'title': article.replace(' ', '_')})
 
     return result
 
@@ -95,6 +98,8 @@ def query_search_api(base_url, params):
     for page in result.get('query', {}).get('search', []):
         title = page.get('title')
         if title:
+            if page.get('sectiontitle'):
+                title = f'{title}#{page.get("sectiontitle")}'
             articles.append(title)
     return articles
 
