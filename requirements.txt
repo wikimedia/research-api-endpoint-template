@@ -1,7 +1,4 @@
-Flask
-Flask-Cors
 mwapi
-PyYAML
+mwparserfromhtml
 requests
 tldextract
-uWSGI
