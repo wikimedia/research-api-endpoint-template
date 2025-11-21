@@ -1,7 +1,7 @@
 from collections import Counter
 from enum import Enum
 import json
-import logging
+#import logging
 import urllib.parse
 
 from fastapi import FastAPI
@@ -19,8 +19,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+#logging.basicConfig(level=logging.INFO)
+#logger = logging.getLogger(__name__)
 
 UA = 'isaac@wikimedia.org -- exemplars'
 
@@ -203,6 +203,7 @@ TOP_ARTICLE_CATEGORIES = {
 ## Entrypoints
 @app.get('/exemplar')
 def get_exemplars(lang: str, title: str, approach: Approach = "nofilter", quality_filter: bool = False):
+    """Get similar articles -- optionally filtered by categories, Wikidata, and/or quality."""
     if lang and title:
         lang = lang.lower()
         page_title, qid = get_canonical_ids(lang, title)
@@ -275,7 +276,8 @@ def get_exemplars(lang: str, title: str, approach: Approach = "nofilter", qualit
     return result
 
 @app.get('/maybe-add-this') 
-def html_based_recs(lang: str, title: str, approach: Approach = "nofilter", quality_filter: bool = False):
+def maybe_add_this(lang: str, title: str, approach: Approach = "nofilter", quality_filter: bool = False):
+    """Get recommendations for features to add to an article based on similar articles."""
     similar_pages = get_exemplars(lang, title, approach, quality_filter)
     if 'error' in similar_pages:
         return similar_pages
