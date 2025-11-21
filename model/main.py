@@ -260,7 +260,7 @@ def get_exemplars(lang: str, title: str, approach: Approach = "nofilter", qualit
                     c_qid = candidate.get('qid')
                     if c_qid:
                         candidate_ios = get_instance_ofs(c_qid)
-                        if article_ios.intersection(candidate_ios):
+                        if candidate_ios and article_ios.intersection(candidate_ios):
                             exemplars.append(candidate['title'])
                             filter = 'instance-of-match'
                             # kinda slow so don't do more than we need to
