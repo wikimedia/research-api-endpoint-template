@@ -299,7 +299,7 @@ def maybe_add_this(lang: str, title: str, approach: Approach = "nofilter", quali
             similar_features[element_type].update(page_features[element_type])
 
     recommendations = {}
-    min_evidence = len(similar_pages) / 5
+    min_evidence = len(similar_pages['exemplars']) / 5
     for element_type in similar_features:
         recommendations[element_type] = []
         if element_type == 'infoboxes' and source_features['infoboxes']:
