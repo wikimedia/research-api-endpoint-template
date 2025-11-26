@@ -1,42 +1,15 @@
-import os
+from enum import Enum
+import logging
 import time
 import traceback
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from mwedittypes import StructuredEditTypes, SimpleEditTypes
 from mwedittypes.utils import full_diff_to_simple
-import mwapi
-import yaml
+import requests
 
-__dir__ = os.path.dirname(__file__)
-
-app = Flask(__name__)
-
-WIKIPEDIA_LANGUAGE_CODES = ['aa', 'ab', 'ace', 'ady', 'af', 'ak', 'als', 'am', 'an', 'ang', 'ar', 'arc', 'ary', 'arz',
-                            'as', 'ast', 'atj', 'av', 'avk', 'awa', 'ay', 'az', 'azb', 'ba', 'ban', 'bar', 'bat-smg',
-                            'bcl', 'be', 'be-x-old', 'bg', 'bh', 'bi', 'bjn', 'bm', 'bn', 'bo', 'bpy', 'br', 'bs',
-                            'bug', 'bxr', 'ca', 'cbk-zam', 'cdo', 'ce', 'ceb', 'ch', 'cho', 'chr', 'chy', 'ckb', 'co',
-                            'cr', 'crh', 'cs', 'csb', 'cu', 'cv', 'cy', 'da', 'de', 'din', 'diq', 'dsb', 'dty', 'dv',
-                            'dz', 'ee', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'ext', 'fa', 'ff', 'fi', 'fiu-vro',
-                            'fj', 'fo', 'fr', 'frp', 'frr', 'fur', 'fy', 'ga', 'gag', 'gan', 'gcr', 'gd', 'gl', 'glk',
-                            'gn', 'gom', 'gor', 'got', 'gu', 'gv', 'ha', 'hak', 'haw', 'he', 'hi', 'hif', 'ho', 'hr',
-                            'hsb', 'ht', 'hu', 'hy', 'hyw', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'ilo', 'inh',
-                            'io', 'is', 'it', 'iu', 'ja', 'jam', 'jbo', 'jv', 'ka', 'kaa', 'kab', 'kbd', 'kbp', 'kg',
-                            'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'koi', 'kr', 'krc', 'ks', 'ksh', 'ku', 'kv', 'kw',
-                            'ky', 'la', 'lad', 'lb', 'lbe', 'lez', 'lfn', 'lg', 'li', 'lij', 'lld', 'lmo', 'ln', 'lo',
-                            'lrc', 'lt', 'ltg', 'lv', 'mai', 'map-bms', 'mdf', 'mg', 'mh', 'mhr', 'mi', 'min', 'mk',
-                            'ml', 'mn', 'mnw', 'mr', 'mrj', 'ms', 'mt', 'mus', 'mwl', 'my', 'myv', 'mzn', 'na', 'nah',
-                            'nap', 'nds', 'nds-nl', 'ne', 'new', 'ng', 'nl', 'nn', 'no', 'nov', 'nqo', 'nrm', 'nso',
-                            'nv', 'ny', 'oc', 'olo', 'om', 'or', 'os', 'pa', 'pag', 'pam', 'pap', 'pcd', 'pdc', 'pfl',
-                            'pi', 'pih', 'pl', 'pms', 'pnb', 'pnt', 'ps', 'pt', 'qu', 'rm', 'rmy', 'rn', 'ro',
-                            'roa-rup', 'roa-tara', 'ru', 'rue', 'rw', 'sa', 'sah', 'sat', 'sc', 'scn', 'sco', 'sd',
-                            'se', 'sg', 'sh', 'shn', 'si', 'simple', 'sk', 'sl', 'sm', 'smn', 'sn', 'so', 'sq', 'sr',
-                            'srn', 'ss', 'st', 'stq', 'su', 'sv', 'sw', 'szl', 'szy', 'ta', 'tcy', 'te', 'tet', 'tg',
-                            'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tpi', 'tr', 'ts', 'tt', 'tum', 'tw', 'ty', 'tyv',
-                            'udm', 'ug', 'uk', 'ur', 'uz', 've', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wo',
-                            'wuu', 'xal', 'xh', 'xmf', 'yi', 'yo', 'za', 'zea', 'zh', 'zh-classical', 'zh-min-nan',
-                            'zh-yue', 'zu']
+UA = 'isaac@wikimedia.org -- edit-types.wmcloud.org'
 
 COMPLEX_EDIT_TYPES = ['Template', 'Media', 'Table']
 CONTEXT_TYPES = ['Section', 'Sentence', 'Paragraph']
@@ -56,80 +29,119 @@ EASY_TYPES = ['Whitespace', 'Punctuation', 'Word', 'Sentence', 'Paragraph', 'Sec
 MEDIUM_TYPES = ['Comment', 'List', 'Category', 'Wikilink', 'ExternalLink', 'Text Formatting', 'Heading']
 HARD_TYPES = ['Other Tag', 'Reference', 'Media', 'Table', 'Template']
 
+class ContentType(str, Enum):
+    wikitext = "wikitext"
+    html = "html"
+
 # load in app user-agent or any other app config
-app.config.update(
-    yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
+app = FastAPI()
 
 # Enable CORS for API endpoints
-cors = CORS(app, resources={r'/diff-*': {'origins': '*'}})
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_headers=["*"],
+)
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-@app.route('/diff-summary', methods=['GET'])
-def diff_summary():
+@app.get('/diff-summary')
+def diff_summary(lang: str, revid: int, content_type: ContentType = "wikitext"):
     """Full version -- allow for testing API without breaking interface"""
-    lang, revid, title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
+    if lang.endswith('wiki'):
+        return {'error': f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"}
+    elif revid <= 0:
+        return {'error': f"{revid} is not a valid revision ID -- e.g., 979988715 for https://en.wikipedia.org/w/index.php?oldid=979988715"}
+    title = get_page_title(lang, revid)
+    article = f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'
+    if not title:
+         return {'error': f"{article} does not seem to be valid."}
+    if content_type.value == "wikitext":
+        prev_content, curr_content = get_wikitext(lang, revid, title)
     else:
-        prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
-        summary = get_summary(prev_wikitext, curr_wikitext, lang)
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'summary': summary
-                  }
-        return jsonify(result)
+        prev_content, curr_content = get_html_revisions(lang, revid, title)
+    if not prev_content and not curr_content:
+        return {'error': f'cannot fetch {content_type.value} for {article}'}
+
+    summary = get_summary(prev_content, curr_content, lang, content_type=content_type.value)
+    result = {'article': article,
+              'summary': summary
+              }
+    return result
 
 
-@app.route('/diff-details', methods=['GET'])
-def diff_details():
+@app.get('/diff-details')
+def diff_details(lang: str, revid: int, content_type: ContentType = "wikitext"):
     """Full version -- allow for testing API without breaking interface"""
-    lang, revid, title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
+    if lang.endswith('wiki'):
+        return {'error': f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"}
+    elif revid <= 0:
+        return {'error': f"{revid} is not a valid revision ID -- e.g., 979988715 for https://en.wikipedia.org/w/index.php?oldid=979988715"}
+    title = get_page_title(lang, revid)
+    article = f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'
+    if not title:
+         return {'error': f"{article} does not seem to be valid."}
+    if content_type.value == "wikitext":
+        prev_content, curr_content = get_wikitext(lang, revid, title)
     else:
-        prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
-        details, _ = get_details(prev_wikitext, curr_wikitext, lang)
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
-                  'summary': full_diff_to_simple(details) if details is not None else None,
-                  'details': details_to_dict(details)
-                  }
-        return jsonify(result)
+        prev_content, curr_content = get_html_revisions(lang, revid, title)
+    if not prev_content and not curr_content:
+        return {'error': f'cannot fetch {content_type.value} for {article}'}
+    
+    details, _ = get_details(prev_content, curr_content, lang, content_type=content_type.value)
+    result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}',
+              'summary': full_diff_to_simple(details) if details is not None else None,
+              'details': details_to_dict(details)
+              }
+    return result
 
 
-@app.route('/diff-debug', methods=['GET'])
-def diff_debug():
+@app.get('/diff-debug')
+def diff_debug(lang: str, revid: int, content_type: ContentType = "wikitext"):
     """Full diff, tree diff, and simple diff to compare."""
-    lang, revid, title, error = validate_api_args()
-    if error is not None:
-        return jsonify({'error': error})
+    if lang.endswith('wiki'):
+        return {'error': f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"}
+    elif revid <= 0:
+        return {'error': f"{revid} is not a valid revision ID -- e.g., 979988715 for https://en.wikipedia.org/w/index.php?oldid=979988715"}
+    title = get_page_title(lang, revid)
+    article = f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'
+    if not title:
+         return {'error': f"{article} does not seem to be valid."}
+    if content_type.value == "wikitext":
+        prev_content, curr_content = get_wikitext(lang, revid, title)
     else:
-        result = {'article': f'https://{lang}.wikipedia.org/wiki/?oldid={revid}'}
-        prev_wikitext, curr_wikitext = get_wikitext(lang, revid, title)
-        start = time.time()
-        details, tree_diff = get_details(prev_wikitext, curr_wikitext, lang)
-        result['structured'] = {'details': details_to_dict(details),
-                                'summary': full_diff_to_simple(details) if details is not None else None,
-                                'tree': tree_diff,
-                                'elapsed-time (s)': time.time() - start}
-        start = time.time()
-        summary = get_summary(prev_wikitext, curr_wikitext, lang)
-        result['simple'] = {'summary': summary,
+        prev_content, curr_content = get_html_revisions(lang, revid, title)
+    if not prev_content and not curr_content:
+        return {'error': f'cannot fetch {content_type.value} for {article}'}
+
+    result = {'article': article}
+    start = time.time()
+    details, tree_diff = get_details(prev_content, curr_content, lang, content_type=content_type.value)
+    result['structured'] = {'details': details_to_dict(details),
+                            'summary': full_diff_to_simple(details) if details is not None else None,
+                            'tree': tree_diff if content_type.value == "wikitext" else None,
                             'elapsed-time (s)': time.time() - start}
-        try:
-            edit_categories = get_edit_categories(summary, details)
-        except Exception:
-            edit_categories = traceback.format_exc()
-        result['edit-categories'] = edit_categories
-        try:
-            edit_difficulty = simple_et_to_difficulty(summary)
-        except Exception:
-            edit_difficulty = traceback.format_exc()
-        result['edit-difficulty'] = edit_difficulty
-        try:
-            edit_size = simple_et_to_size(summary)
-        except Exception:
-            edit_size = traceback.format_exc()
-        result['edit-size'] = edit_size
-        return jsonify(result)
+    start = time.time()
+    summary = get_summary(prev_content, curr_content, lang, content_type=content_type.value)
+    result['simple'] = {'summary': summary,
+                        'elapsed-time (s)': time.time() - start}
+    try:
+        edit_categories = get_edit_categories(summary, details)
+    except Exception:
+        edit_categories = traceback.format_exc()
+    result['edit-categories'] = edit_categories
+    try:
+        edit_difficulty = simple_et_to_difficulty(summary)
+    except Exception:
+        edit_difficulty = traceback.format_exc()
+    result['edit-difficulty'] = edit_difficulty
+    try:
+        edit_size = simple_et_to_size(summary)
+    except Exception:
+        edit_size = traceback.format_exc()
+    result['edit-size'] = edit_size
+    return result
 
 
 def details_to_dict(details):
@@ -138,34 +150,37 @@ def details_to_dict(details):
                     'nodes': [n._asdict() for n in details['node-edits']],
                     'text': [n._asdict() for n in details['text-edits']]}
         for n in expanded['nodes']:
-            for i in range(0, len(n['changes'])):
-                c = n['changes'][i]
-                n['changes'][i] = {'change-type': c[0], 'prev': c[1], 'curr': c[2]}
+            if n["changes"]:
+                for i in range(0, len(n['changes'])):
+                    c = n['changes'][i]
+                    n['changes'][i] = {'change-type': c[0], 'prev': c[1], 'curr': c[2]}
         return expanded
 
 
-def get_wikitext(lang, revid, title, session=None):
-    if session is None:
-        session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
-
+def get_wikitext(lang, revid, title):
+    base_url = f"https://{lang}.wikipedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "prop": "revisions",
+        "titles": title,
+        "rvlimit": 2,
+        "rvdir": "older",
+        "rvstartid": revid,
+        "rvprop": "content",
+        "rvslots": "*",
+        "format": "json",
+        "formatversion": 2
+    }    
     # generate wikitext for revision and previous
     # https://en.wikipedia.org/w/api.php?action=query&prop=revisions&titles=Eve%20Ewing&rvlimit=2&rvdir=older&rvstartid=979988715&rvprop=ids|content|comment&format=json&formatversion=2&rvslots=*
-    result = session.get(
-        action="query",
-        prop="revisions",
-        titles=title,
-        rvlimit=2,
-        rvdir="older",
-        rvstartid=revid,
-        rvprop="ids|content|comment",
-        rvslots="*",
-        format='json',
-        formatversion=2,
-    )
+    response = requests.get(base_url, params=params,
+                            headers={'User-Agent': UA})
+    result = response.json()
+
     try:
         curr_wikitext = result['query']['pages'][0]['revisions'][0]['slots']['main']['content']
     except IndexError:
-        return None  # seems some sort of API error; just fail at this point
+        curr_wikitext = ""   # maybe deleted revision or API error -- probably should just fail
     try:
         prev_wikitext = result['query']['pages'][0]['revisions'][1]['slots']['main']['content']
     except IndexError:
@@ -174,10 +189,10 @@ def get_wikitext(lang, revid, title, session=None):
     return prev_wikitext, curr_wikitext
 
 
-def get_summary(prev_wikitext, curr_wikitext, lang):
+def get_summary(prev_wikitext, curr_wikitext, lang, content_type="wikitext"):
     """Get edit types summary."""
     try:
-        differ = SimpleEditTypes(content_type="wikitext", prev_content=prev_wikitext, curr_content=curr_wikitext, lang=lang)
+        differ = SimpleEditTypes(content_type=content_type, prev_content=prev_wikitext, curr_content=curr_wikitext, lang=lang)
         summary = differ.get_diff()
     except Exception:
         summary = None
@@ -185,10 +200,10 @@ def get_summary(prev_wikitext, curr_wikitext, lang):
     return summary
 
 
-def get_details(prev_wikitext, curr_wikitext, lang):
+def get_details(prev_wikitext, curr_wikitext, lang, content_type="wikitext"):
     """Get detailed edit types list."""
     try:
-        differ = StructuredEditTypes(content_type="wikitext", prev_content=prev_wikitext, curr_content=curr_wikitext, lang=lang)
+        differ = StructuredEditTypes(content_type=content_type, prev_content=prev_wikitext, curr_content=curr_wikitext, lang=lang)
         actions = differ.get_diff()
         tree_diff = differ.tree_diff
     except Exception:
@@ -386,66 +401,65 @@ def simple_et_to_higher_level(summary):
     return types
 
 
-def get_page_title(lang, revid, session=None):
+def get_page_title(lang, revid):
     """Get page associated with a given revision ID"""
-    if session is None:
-        session = mwapi.Session(f'https://{lang}.wikipedia.org', user_agent=app.config['CUSTOM_UA'])
-
-    result = session.get(
-        action="query",
-        prop="info",
-        inprop='',
-        revids=revid,
-        format='json',
-        formatversion=2
-    )
-    if 'badrevids' in result['query']:
-        return None
-    else:
-        return result['query']['pages'][0]['title']
-
-
-def validate_revid(revid):
+    base_url = f"https://{lang}.wikipedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "prop": "info",
+        "inprop": "",
+        "revids": revid,
+        "format": "json",
+        "formatversion": 2
+    }    
+    response = requests.get(base_url, params=params,
+                            headers={'User-Agent': UA})
     try:
-        revid = int(revid)
-        if revid > 0:
-            return True
+        result = response.json()
+        if 'badrevids' in result['query']:
+            return ""
         else:
-            return False
-    except ValueError:
-        return False
+            return result['query']['pages'][0]['title']
+    except Exception:
+        return None
+    
 
+def fetch_html(revid, lang="en"):
+    r = requests.get(f"https://{lang}.wikipedia.org/w/rest.php/v1/revision/{revid}/html",
+                         headers={'User-Agent': UA})
+    return r.text
 
-def validate_lang(lang):
-    return lang in WIKIPEDIA_LANGUAGE_CODES
+def get_html_revisions(lang, revid, title):
+    base_url = f"https://{lang}.wikipedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "prop": "revisions",
+        "titles": title,
+        "rvlimit": 2,
+        "rvdir": "older",
+        "rvstartid": revid,
+        "rvprop": "ids",
+        "rvslots": "*",
+        "format": "json",
+        "formatversion": 2
+    }    
+    # generate wikitext for revision and previous
+    # https://en.wikipedia.org/w/api.php?action=query&prop=revisions&titles=Eve%20Ewing&rvlimit=2&rvdir=older&rvstartid=979988715&rvprop=ids|content|comment&format=json&formatversion=2&rvslots=*
+    response = requests.get(base_url, params=params,
+                            headers={'User-Agent': UA})
+    result = response.json()
+    try:
+        curr_revid = result['query']['pages'][0]['revisions'][0]['revid']
+        curr_html = fetch_html(revid=curr_revid, lang=lang)
+    except Exception:
+        curr_html = ""
+    try:
+        prev_revid = result['query']['pages'][0]['revisions'][0]['parentid']
+        prev_html = fetch_html(revid=prev_revid, lang=lang)
+    except Exception:
+        prev_html = ""
 
-
-def validate_api_args():
-    """Validate API arguments for language-agnostic model."""
-    error = None
-    lang = None
-    revid = None
-    title = None
-    if not request.args.get('lang') and not request.args.get('revid'):
-        error = 'No lang or revid provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
-    elif not request.args.get('lang'):
-        error = 'No lang provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
-    elif not request.args.get('revid'):
-        error = 'No revid provided. Please provide both -- e.g., "...?lang=en&revid=979988715'
-    else:
-        lang = request.args['lang']
-        if not validate_lang(lang):
-            error = f"{lang} is not a valid Wikipedia language -- e.g., 'en' for English"
-        revid = request.args['revid']
-        if not validate_revid(revid):
-            error = f"{revid} is not a valid revision ID -- e.g., 979988715 for " \
-                    "https://en.wikipedia.org/w/index.php?oldid=979988715"
-        title = get_page_title(lang, revid)
-
-    return lang, revid, title, error
-
-
-application = app
+    return prev_html, curr_html
 
 if __name__ == '__main__':
-    application.run()
+    app.run()
