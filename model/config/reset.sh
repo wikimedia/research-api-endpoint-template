@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # update API endpoint with new model, code, etc.
 
+# these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
+REPO_LBL='edit-types'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
-GIT_BRANCH='wikitech-search'
+GIT_BRANCH='ref-check'
 
+# derived paths
 ETC_PATH="/etc/${APP_LBL}"  # app config info, scripts, ML models, etc.
 TMP_PATH="/tmp/${APP_LBL}"  # store temporary files created as part of setting up app (cleared with every update)
 
@@ -16,11 +19,9 @@ git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out
 echo "Copying configuration files..."
-cp ${TMP_PATH}/${GIT_BRANCH}/model/config/gunicorn.conf.py ${ETC_PATH}
-cp ${TMP_PATH}/${GIT_BRANCH}/model/wsgi.py ${ETC_PATH}
-cp ${TMP_PATH}/${GIT_BRANCH}/model/flask_config.yaml ${ETC_PATH}
-cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
-cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
+cp ${TMP_PATH}/${REPO_LBL}/model/main.py ${ETC_PATH}
+cp ${TMP_PATH}/${REPO_LBL}/model/config/model.service /etc/systemd/system/
+cp ${TMP_PATH}/${REPO_LBL}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model
 fi

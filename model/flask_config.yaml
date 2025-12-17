@@ -1,5 +1,0 @@
-# User-agent used for querying Wikidata API
-CUSTOM_UA: "content-similarity (cloud-vps) -- isaac@wikimedia.org"
-JSON_SORT_KEYS: False
-
-DEBUG: False

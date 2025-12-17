@@ -1,9 +1,6 @@
 beautifulsoup4
-Flask
-Flask-Cors
 mwapi
 mwparserfromhell
 protobuf
-PyYAML
 requests
 sentence-transformers
