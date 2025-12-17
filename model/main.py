@@ -17,24 +17,44 @@
 from contextlib import asynccontextmanager
 import logging
 import os
-import random
+import re
 import time
 
-# where nearest neighbor index and models will go
+# where models will go
 # must be set before library imports
-HF_DIR = '/etc/api-endpoint'
+HF_DIR = "./" #'/etc/api-endpoint'
 os.environ['HF_HOME'] = HF_DIR
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from minicheck.minicheck import MiniCheck
 import requests
-from sentence_transformers import CrossEncoder
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-UA = 'isaac@wikimedia.org -- ref-check.wmcloud.org'
+
+UA = 'isaac@wikimedia.org -- get-source.wmcloud.org'
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+MODEL_NAME = 'jinaai/ReaderLM-v2'
+DEVICE = "cpu"
+MODEL = None
+TOKENIZER = None
+INSTRUCTION = "Extract the main content from the given HTML and convert it to Markdown format."
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load in model."""
+    global MODEL, TOKENIZER
+    logger.info("Loading in model!")
+    TOKENIZER = AutoTokenizer.from_pretrained(MODEL_NAME)
+    MODEL = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to(DEVICE)
+    logger.info(MODEL)
+    yield
+    MODEL = None
+    TOKENIZER = None
 
 # load in app user-agent or any other app config
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 # Enable CORS for API endpoints
 app.add_middleware(
@@ -43,104 +63,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-from passages.web_source import get_passages
-from passages.wiki_claim import get_claims
-
-
-MODEL_NAME = 'flan-t5-large'
-MODEL = None
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Load in embeddings."""
-    global MODEL
-    logger.info("Loading in model!")
-    MODEL = MiniCheck(model_name=MODEL_NAME, cache_dir=HF_DIR)
-    logger.info(MODEL.model)    
-    yield
-    MODEL = None
+# Patterns
+SCRIPT_PATTERN = re.compile(r"<[ ]*script.*?\/[ ]*script[ ]*>",
+                            flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+STYLE_PATTERN = re.compile(r"<[ ]*style.*?\/[ ]*style[ ]*>",
+                           flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+META_PATTERN = re.compile(r"<[ ]*meta.*?>",
+                          flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+COMMENT_PATTERN = re.compile(r"<[ ]*!--.*?--[ ]*>",
+                             flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+LINK_PATTERN = re.compile(r"<[ ]*link.*?>",
+                          flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+SVG_PATTERN = re.compile(r"(<svg[^>]*>)(.*?)(<\/svg>)",
+                         flags=re.DOTALL)
+BASE64_IMG_PATTERN = re.compile(r'<img[^>]+src="data:image/[^;]+;base64,[^"]+"[^>]*>')
 
 
 @app.get('/models')
 def get_models():
     return {'model': MODEL_NAME}
 
-@app.get('/verify-random-claim')
-def verify_random_claim(title: str):
-    title = get_canonical_page_title(title)
-    if title is None:
-        return {'error': f'no article found for https://en.wikipedia.org/wiki/{title}'}
-    
-    claims = get_claims(title=title, user_agent=UA)
-    if not claims:
-        return {'error': f'no claims found in https://en.wikipedia.org/wiki/{title}'}
 
-    url, section, text = random.choice(claims)
-    result = {'article': f'https://en.wikipedia.org/wiki/{title}',
-                'claim': {'url':url, 'section':section, 'text':text},
-                'passages':[]
-                }
-    for passage in get_passages(url=url, user_agent=UA):
-        if passage is not None:
-            start = time.time()
-            source_title, passage_text = passage
-            score = get_score(text, f'{source_title}. {passage}')
-            result['source_title'] = source_title
-            result['passages'].append({'passage':passage_text, 'score':score, 'time (s)':time.time() - start})
-    return result
+@app.get('/get-source')
+def get_source(url: str):
+    timing = {}
+    start = time.time()
+    response = requests.get(url, headers={'User-Agent': UA})
+    timing['fetch-html'] = time.time() - start
+    if response.status_code < 400:
+        raw_html = response.text
+        start = time.time()
+        cleaned_html = clean_html(raw_html)
+        timing['clean-html'] = time.time() - start
+        prompt = f"{INSTRUCTION}\n```html\n{cleaned_html}\n```"
+        messages = [{"role": "user", "content": prompt}]
+        input_prompt = TOKENIZER.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        start = time.time()
+        inputs = TOKENIZER.encode(input_prompt, return_tensors="pt").to(DEVICE)
+        outputs = MODEL.generate(
+            inputs, max_new_tokens=1024, temperature=0, do_sample=False, repetition_penalty=1.08
+        )
+        timing['process-html'] = time.time() - start
+        return {
+            'status':response.status_code,
+            'timing': timing,
+            'html': cleaned_html,
+            'text': TOKENIZER.decode(outputs[0])
+        }
+    else:
+        return {
+            'status': response.status_code,
+            'timing': timing,
+            'html': None,
+            'text': None
+            }
+
+
+def clean_html(html: str):
+    html = SCRIPT_PATTERN.sub("", html)
+    html = STYLE_PATTERN.sub("", html)
+    html = META_PATTERN.sub("", html)
+    html = COMMENT_PATTERN.sub("", html)
+    html = LINK_PATTERN.sub("", html)
+    html = SVG_PATTERN.sub(lambda m: f"{m.group(1)}{m.group(3)}", html)
+    html = BASE64_IMG_PATTERN.sub('<img src="#"/>', html)
+    return html
         
-    
-
-@app.get('/get-all-claims')
-def get_all_claims(title: str):
-    title = get_canonical_page_title(title)
-    if title is None:
-        return {'error': f'no article found for https://en.wikipedia.org/wiki/{title}'}
-    
-    claims = get_claims(title=title, user_agent=UA)
-    result = {'article': f'https://en.wikipedia.org/wiki/{title}',
-                'claims': [{'url': c[0], 'section': c[1], 'text': c[2]} for c in claims]
-                }
-    return result
-    
-
-
-def get_score(wiki_claim, passage):
-    """Score the support of a claim from a given passage."""
-    scores = MODEL.predict([(wiki_claim, passage), ], apply_softmax=True)
-
-    # Convert scores to labels
-    label_mapping = ['contradiction', 'entailment', 'neutral']
-    labels = list(zip(label_mapping, [float(s) for s in scores[0]]))
-    return labels
-
-
-def get_canonical_page_title(title: str, lang: str = 'en'):
-    """Get canonical title -- resolving redirects and standardizing form"""
-    base_url = f"https://{lang}.wikipedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "prop": "info",
-        "inprop": "",
-        "redirects": "",
-        "titles": title,
-        "format": "json",
-        "formatversion": 2
-    }    
-    response = requests.get(base_url, params=params,
-                            headers={'User-Agent': UA})
-    try:
-        result = response.json()
-        if 'missing' in result['query']['pages'][0]:
-            return None
-        else:
-            return result['query']['pages'][0]['title']
-    except Exception:
-        return None
-
 
 if __name__ == '__main__':
     app.run()
