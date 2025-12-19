@@ -1,6 +1,6 @@
-beautifulsoup4
-mwapi
-mwparserfromhell
-protobuf
+mwparserfromhtml
+mwtokenizer
+pypdf
 requests
-sentence-transformers
+tldextract
+trafilatura
