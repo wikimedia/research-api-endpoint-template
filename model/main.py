@@ -1,53 +1,46 @@
-# FastAPI that compares claims on Wikipedia to their sources.
-#
-# Originally based on: https://github.com/facebookresearch/side
-# Goal: Help prioritize citations on English Wikipedia for verification / improvement
-#
-# Components:
-# * web_source: gather passages from a given external URL for verification
-# * wiki_claim: extract claims (text + citation URL supposedly supporting it) from a Wikipedia article
-# * SentenceTransformer: language model for comparing two passages and computing some form of support or similarity.
-#    * <guidance on interpreting scores>
-#    * <guidance on loading time / processing time>
-#
-# API Endpoints:
-# * /api/verify-random-claim: explore the model -- fetch a random citation from a Wikipedia article and evaluate it
-# * /api/get-all-claims: generate input data -- get all claims for a Wikipedia article
-# * /api/verify-claim: verify a single claim -- check a claim from get-all-claims
 from contextlib import asynccontextmanager
+import io
 import json
 import logging
 import os
+from pydantic import Field
+import secrets
 import time
 import traceback
+from typing import Annotated
 import urllib.parse
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-HF_DIR = "./" #'/etc/api-endpoint'
+HF_DIR = '/etc/api-endpoint'
 os.environ['HF_HOME'] = HF_DIR
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from minicheck.minicheck import MiniCheck
 import mwparserfromhtml as mw
 from mwtokenizer.tokenizer import Tokenizer
-import pypdf
+from pypdf import PdfReader
 import requests
 import trafilatura
 import tldextract
 
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# config for how we scrape external sites
 UA = 'isaac@wikimedia.org -- ref-check.wmcloud.org'
 # update UA to be kind and allow 3 redirects because DOIs otherwise often fail
 trafilatura.settings.DEFAULT_CONFIG['DEFAULT']['USER_AGENT'] = UA
 trafilatura.settings.DEFAULT_CONFIG['DEFAULT']['MAX_REDIRECTS'] = '3'
 
+# MiniCheck model
 MODEL_NAME = 'flan-t5-large'
 MODEL = None
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# load in model on startup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load in embeddings."""
@@ -58,8 +51,39 @@ async def lifespan(app: FastAPI):
     yield
     MODEL = None
 
-# load in app user-agent or any other app config
-app = FastAPI(lifespan=lifespan)
+# basic security -- these will be changed
+security = HTTPBasic()
+USERNAME = b""
+PASSWORD = b""
+def check_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+    username_given = credentials.username.encode("utf8")
+    is_correct_username = secrets.compare_digest(username_given, USERNAME)
+    password_given = credentials.password.encode("utf8")
+    is_correct_password = secrets.compare_digest(password_given, PASSWORD)
+    if not (is_correct_username and is_correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return True
+
+description = """Check claims against provided citations in Wikipedia articles.
+
+Limitations:
+* 770M parameters -- larger [MiniCheck models](https://github.com/Liyan06/MiniCheck/tree/main) exist (7B) but they're too large for Cloud VPS.
+* Intended for English but in theory should work for any supported [Flan T5 Large language](https://huggingface.co/google/flan-t5-large)
+* Many webpages fail to successfully be scraped -- this is the result of the explosion of AI + scrapers. Some are kind and send 400-level errors. Many just fail non-transparently (to bots).
+* This app is currently behind basic auth so the scraping functionality is less likely to be abused.
+"""
+
+app = FastAPI(title="Basic citation verification API",
+              contact={
+                  "name": "Isaac (WMF)",
+                  "url": "https://meta.wikimedia.org/wiki/User:Isaac_(WMF)"
+                  },
+              lifespan=lifespan,
+              description=description)
 
 # Enable CORS for API endpoints
 app.add_middleware(
@@ -73,19 +97,23 @@ app.add_middleware(
 def get_models():
     return {'model': MODEL_NAME}
 
-@app.get('/get-claims')
-def get_claims(title: str, verify: bool = False, k: int = 10):
-    title = get_canonical_page_title(title)
+@app.get('/get-claims', dependencies=[Depends(check_credentials)])
+def get_claims(
+    title: Annotated[str, Field(description="Wikipedia page title. Leave blank for random page.")] = None, 
+    verify_k: Annotated[int, Field(description="How many URLs to scrape and check? Set to -1 to process all.")] = 0,
+    lang: Annotated[str, Field(description="Wikipedia language edition -- e.g., 'en' for English")] = "en",
+    ):
+    title = get_canonical_page_title(title, lang=lang)
     if title is None:
-        return {'error': f'no article found for https://en.wikipedia.org/wiki/{title}'}
+        return {'error': f'no article found for https://{lang}.wikipedia.org/wiki/{title}'}
     
     start = time.time()
-    claims = get_all_claims(title=title)
+    claims = get_all_claims(title=title, lang=lang)
     if claims is None:
-        return {'error': f'no claims found in https://en.wikipedia.org/wiki/{title}'}
+        return {'error': f'no claims found in https://{lang}.wikipedia.org/wiki/{title}'}
     time_fetch_wiki_html = time.time() - start
 
-    result = {'article': f'https://en.wikipedia.org/wiki/{title}',
+    result = {'article': f'https://{lang}.wikipedia.org/wiki/{title}',
               'time-fetch-wiki-html': time_fetch_wiki_html,
               'claims': []
               }
@@ -94,7 +122,7 @@ def get_claims(title: str, verify: bool = False, k: int = 10):
     for url, section, claim_text in claims:
         claim_result = {'section': section, 'claim_text': claim_text, 'sources':[]}
         source = {'url': url}
-        if verify and url and claim_text and (not k or num_checked < k):
+        if url and claim_text and (verify_k == -1 or num_checked < verify_k):
             start = time.time()
             if url not in source_text_cache:
                 num_checked += 1
@@ -432,21 +460,26 @@ def get_source(url: str):
     http_status = None
     title = None
     plaintext = None
-    if url.endswith(".pdf"):
-        # TODO: implement.
-        # pypdf is probably the way to go and I think I can stick with
-        # trafilatura for fetching the bytes but just decode = False
-        # and pass the data to a pypdf reader
-        pass
-    else:
-        source_response = trafilatura.fetch_response(
-            url = url,
-            decode = True,
-            no_ssl = False,
-            )
-        if source_response:
-            http_status = source_response.status
-            if http_status < 400:
+    source_response = trafilatura.fetch_response(
+        url = url,
+        decode = False if url.endswith(".pdf") else True,
+        no_ssl = False
+        )
+    if source_response:
+        http_status = source_response.status
+        if http_status < 400:
+            if url.endswith(".pdf"):
+                try:
+                    with io.BytesIO(source_response.data) as f:
+                        plaintext = []
+                        title = reader.metadata.get('/Title')
+                        reader = PdfReader(f)
+                        for page in reader.pages:
+                            plaintext.append(page.extract_text().strip())
+                    plaintext = "\n".join(plaintext)
+                except Exception:
+                    pass
+            else:
                 html = source_response.html
                 extract = trafilatura.extract(html, url=url, include_comments=False, output_format="json", with_metadata=True)
                 try:
@@ -472,23 +505,35 @@ def get_scores(wiki_claims, passage):
 def get_canonical_page_title(title: str, lang: str = 'en'):
     """Get canonical title -- resolving redirects and standardizing form"""
     base_url = f"https://{lang}.wikipedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "prop": "info",
-        "inprop": "",
-        "redirects": "",
-        "titles": title,
-        "format": "json",
-        "formatversion": 2
-    }    
-    response = requests.get(base_url, params=params,
-                            headers={'User-Agent': UA})
+    if title is None:
+        result_key = "random"
+        params = {
+            "action": "query",
+            "list": "random",
+            "rnnamespace": 0,
+            "rnlimit": 1,
+            "format": "json",
+            "formatversion": 2
+        }    
+    else:
+        result_key = "pages"
+        params = {
+            "action": "query",
+            "prop": "info",
+            "inprop": "",
+            "redirects": "",
+            "titles": title,
+            "format": "json",
+            "formatversion": 2
+        }    
+
+    response = requests.get(base_url, params=params, headers={'User-Agent': UA})
     try:
         result = response.json()
-        if 'missing' in result['query']['pages'][0]:
+        if 'missing' in result['query'][result_key][0]:
             return None
         else:
-            return result['query']['pages'][0]['title']
+            return result['query'][result_key][0]['title']
     except Exception:
         return None
 
