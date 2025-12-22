@@ -3,7 +3,7 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='edit-types'  # directory where repo code will go
+REPO_LBL='ref-check'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='ref-check'
 
