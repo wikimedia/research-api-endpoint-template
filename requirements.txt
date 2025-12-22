@@ -1,3 +1,4 @@
+accelerate
 mwparserfromhtml
 mwtokenizer
 pypdf

@@ -12,8 +12,9 @@ import urllib.parse
 
 # where nearest neighbor index and models will go
 # must be set before library imports
-HF_DIR = '/etc/api-endpoint'
-os.environ['HF_HOME'] = HF_DIR
+CACHE_DIR = '/etc/api-endpoint'
+os.environ['HF_HOME'] = CACHE_DIR
+os.environ['NLTK_DATA'] = CACHE_DIR
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI):
     """Load in embeddings."""
     global MODEL
     logger.info("Loading in model!")
-    MODEL = MiniCheck(model_name=MODEL_NAME, cache_dir=HF_DIR)
+    MODEL = MiniCheck(model_name=MODEL_NAME, cache_dir=CACHE_DIR)
     logger.info(f"{MODEL_NAME} (context window = {MODEL.model.max_model_len}) successfully loaded.") 
     yield
     MODEL = None

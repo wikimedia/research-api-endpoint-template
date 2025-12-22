@@ -43,10 +43,6 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install "minicheck @ git+https://github.com/Liyan06/MiniCheck.git@main"
 pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
-echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
-chown -R www-data:www-data ${ETC_PATH}
-chown -R www-data:www-data ${LIB_PATH}
-
 echo "Copying configuration files..."
 cp ${TMP_PATH}/${REPO_LBL}/model/main.py ${ETC_PATH}
 cp ${TMP_PATH}/${REPO_LBL}/model/config/model.service /etc/systemd/system/
@@ -55,6 +51,10 @@ if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model
 fi
 ln -s /etc/nginx/sites-available/model /etc/nginx/sites-enabled/
+
+echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
+chown -R www-data:www-data ${ETC_PATH}
+chown -R www-data:www-data ${LIB_PATH}
 
 echo "Enabling and starting services..."
 systemctl enable model.service  # uwsgi starts when server starts up
