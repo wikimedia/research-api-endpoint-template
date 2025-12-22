@@ -49,6 +49,10 @@ async def lifespan(app: FastAPI):
     logger.info("Loading in model!")
     MODEL = MiniCheck(model_name=MODEL_NAME, cache_dir=CACHE_DIR)
     logger.info(f"{MODEL_NAME} (context window = {MODEL.model.max_model_len}) successfully loaded.") 
+    if not os.path.exists(os.path.join(CACHE_DIR, "tokenizers", "punkt_tab")):
+        logger.info("Downloading NLKT resources")
+        import nltk
+        nltk.download('punkt_tab')
     yield
     MODEL = None
 
