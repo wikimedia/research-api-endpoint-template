@@ -74,6 +74,7 @@ def check_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(secur
     return True
 
 description = """Check claims against provided citations in Wikipedia articles.
+Low prediction scores (close to 0) indicate a lack of support for the claim.
 
 Limitations:
 * 770M parameters -- larger [MiniCheck models](https://github.com/Liyan06/MiniCheck/tree/main) exist (7B) but they're too large for Cloud VPS.
@@ -437,8 +438,8 @@ def references_to_urls(article: mw.Article):
         for url in urls:
             tld = tldextract.extract(url.link)
             # TODO add domain skip list or other carve-outs for e.g., youtube, google books, etc.
-            if tld.domain == 'archive' and url.link.endswith(".pdf"):
-                path = urllib.parse.urlparse(url).path
+            if tld.domain == 'archive' and not url.link.endswith(".pdf"):
+                path = urllib.parse.urlparse(url.link).path
                 start_of_archived_url = path.find('http')
                 if start_of_archived_url != -1:
                     link = path[start_of_archived_url:]
