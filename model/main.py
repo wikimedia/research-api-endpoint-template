@@ -107,7 +107,7 @@ def get_models():
 def get_claims(
     title: Annotated[str, Field(description="Wikipedia page title. Leave blank for random page.")] = None, 
     verify_k: Annotated[int, Field(description="How many URLs to scrape and check? Set to -1 to process all.")] = 0,
-    lang: Annotated[str, Field(description="Wikipedia language edition -- e.g., 'en' for English")] = "en",
+    lang: Annotated[str, Field(description="Wikipedia language edition -- e.g., 'en' for English")] = "en"
     ):
     title = get_canonical_page_title(title, lang=lang)
     if title is None:
@@ -162,6 +162,45 @@ def get_claims(
         if result['claims'][i]['claim_text'] == result['claims'][j]['claim_text']:
             result['claims'][i]['sources'].extend(result['claims'][j]['sources'])
             result['claims'].pop(j)
+
+    return result
+
+
+@app.get('/check-claim', dependencies=[Depends(check_credentials)])
+def check_claim(
+    title: Annotated[str, Field(description="Wikipedia page title. Leave blank for random page.")] = None, 
+    citation_no: Annotated[int, Field(description="Which citation to verify? Note: hacky and doesn't always match follow [#] superscripts from article. Just try a few.")] = 1,
+    lang: Annotated[str, Field(description="Wikipedia language edition -- e.g., 'en' for English")] = "en"
+    ):
+    title = get_canonical_page_title(title, lang=lang)
+    if title is None:
+        return {'error': f'no article found for https://{lang}.wikipedia.org/wiki/{title}'}
+    
+    start = time.time()
+    claims = get_all_claims(title=title, lang=lang)
+    if claims is None:
+        return {'error': f'no claims found in https://{lang}.wikipedia.org/wiki/{title}'}
+    time_fetch_wiki_html = time.time() - start
+
+    result = {'article': f'https://{lang}.wikipedia.org/wiki/{title}',
+              'time-fetch-wiki-html': time_fetch_wiki_html,
+              }
+    url, section, claim_text = claims[citation_no or -1 if citation_no >= len(claims)]
+    claim_result = {'section': section, 'claim_text': claim_text, 'url':url}
+    if url and claim_text:
+        start = time.time()
+        http_status, src_title, src_markdown = get_source(url)
+        time_fetch_source = time.time() - start
+        claim_result['http-status'] = http_status
+        claim_result['src-title'] = src_title
+        claim_result['src-markdown'] = src_markdown
+        claim_result['fetch-time'] = time_fetch_source
+        if src_markdown:
+            start = time.time()
+            score = get_scores(wiki_claims=[f"{title}. {section}. claim_text"], passage=f'{src_title}. {src_markdown}')[0]
+            predict_time = time.time() - start
+            claim_result['prediction'] = {'score': score, 'score-time': predict_time}
+    result['result'] = claim_result
 
     return result
         
