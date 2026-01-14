@@ -185,7 +185,7 @@ def check_claim(
     result = {'article': f'https://{lang}.wikipedia.org/wiki/{title}',
               'time-fetch-wiki-html': time_fetch_wiki_html,
               }
-    url, section, claim_text = claims[citation_no if citation_no >= len(claims) else -1]
+    url, section, claim_text = claims[citation_no if citation_no < len(claims) else -1]
     claim_result = {'section': section, 'claim_text': claim_text, 'url':url}
     if url and claim_text:
         start = time.time()
