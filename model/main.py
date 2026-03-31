@@ -427,7 +427,13 @@ def get_page_title(lang, revid):
 def fetch_html(revid, lang="en"):
     r = requests.get(f"https://{lang}.wikipedia.org/w/rest.php/v1/revision/{revid}/html",
                          headers={'User-Agent': UA})
-    return r.text
+    html = r.text
+    try:
+        # JSON error code when revision doesn't exist -- treat as blank
+        error = r.json()
+        return ""
+    except Exception:
+        return r.text
 
 def get_html_revisions(lang, revid, title):
     base_url = f"https://{lang}.wikipedia.org/w/api.php"
