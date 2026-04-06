@@ -1,16 +1,13 @@
 import logging
 import os
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 from flask_cors import CORS
-import yaml
 
 app = Flask(__name__)
 
 __dir__ = os.path.dirname(__file__)
 
-# load in app user-agent or any other app config
-app.config.update(yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
 
 # Enable CORS for API endpoints
 cors = CORS(app, resources={r'/*': {'origins': '*'}})
@@ -19,13 +16,9 @@ cors = CORS(app, resources={r'/*': {'origins': '*'}})
 @app.route('/<path:u_path>', methods=['GET'])
 def deprecated(u_path):
     """All endpoints return same deprecation message."""
-    deprecation_message = ("GapFinder has been deprecated. "
-                           "Background: https://phabricator.wikimedia.org/T367549. "
-                           "For the API, please use the LiftWing endpoint. "
-                           "Documentation: https://api.wikimedia.org/wiki/Lift_Wing_API/Reference/Get_content_translation_recommendation. "
-                           "Example migration: https://fa.wikipedia.org/w/index.php?title=%D9%85%D8%AF%DB%8C%D8%A7%D9%88%DB%8C%DA%A9%DB%8C:TofawikiRecommend.js&diff=prev&oldid=39750822. "
-                           "For the UI, please use Content Translation: "
-                           "https://www.mediawiki.org/wiki/Content_translation#Try_the_tool")
+    deprecation_message = ("wiki-search-referrals.wmcloud.org has been deprecated. "
+                           "For more details, see: https://wikitech.wikimedia.org/wiki/Data_Platform/Data_Lake/Traffic/referrer_daily/Dashboard. "
+                           "If you have questions, you may reach out to https://meta.wikimedia.org/wiki/User:Isaac_(WMF).")
     return jsonify({"error": deprecation_message})
 
 
