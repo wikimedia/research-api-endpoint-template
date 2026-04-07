@@ -3,7 +3,7 @@ Description=Research API service
 After=syslog.target
 
 [Service]
-ExecStart=/var/lib/api-endpoint/p3env/bin/gunicorn --config /etc/api-endpoint/gunicorn.conf.py
+ExecStart=/var/lib/api-endpoint/p3env/bin/fastapi run /etc/api-endpoint/main.py
 User=www-data
 Group=www-data
 Restart=always
