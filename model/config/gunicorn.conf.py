@@ -21,7 +21,7 @@ umask = 7
 # keep in memory) and preload should also be set to False
 # You can also experiment with doing `import torch; torch.set_num_threads(1)`
 # in the API but this tends to double or more the latency for individual requests
-workers = (multiprocessing.cpu_count() * 2) + 1
+workers = 1
 
 # If # of workers is limited, switch to gevent for some threading
 # Then also need to do `pip install gunicorn[gevent]` instead of `pip install gunicorn`
@@ -42,7 +42,7 @@ timeout = 30
 # https://docs.gunicorn.org/en/stable/settings.html#preload-app
 # Also if using PyTorch, this must be set to False
 # See: https://github.com/benoitc/gunicorn/issues/2478
-preload_app = True
+preload_app = False
 
 # Where to log requests to -- must match cloudvps_setup.sh $LOG_PATH directory
 # https://docs.gunicorn.org/en/stable/settings.html#accesslog
