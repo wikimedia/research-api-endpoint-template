@@ -6,6 +6,9 @@ chdir = '/etc/api-endpoint/'
 # https://docs.gunicorn.org/en/stable/settings.html#wsgi-app
 wsgi_app = 'wsgi:app'
 
+# disable control socket, otherwise permissions errors
+control_socket_disable = True
+
 # unix socket where gunicorn will talk with nginx (must match model.nginx)
 # https://docs.gunicorn.org/en/stable/settings.html#bind
 bind = 'unix:/srv/api-endpoint/sock/model.sock'
