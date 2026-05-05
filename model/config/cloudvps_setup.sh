@@ -30,6 +30,7 @@ rm -rf ${ETC_PATH}
 rm -rf ${LIB_PATH}
 mkdir -p ${TMP_PATH}
 mkdir -p ${LIB_PATH}
+mkdir -p ${ETC_PATH}
 
 echo "Setting up virtualenv..."
 python3 -m venv ${LIB_PATH}/p3env
