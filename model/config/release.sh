@@ -28,8 +28,6 @@ source ${LIB_PATH}/p3env/bin/activate
 echo "Installing repositories..."
 pip install wheel
 pip install "fastapi[standard]"
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install "minicheck @ git+https://github.com/Liyan06/MiniCheck.git@main"
 pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out

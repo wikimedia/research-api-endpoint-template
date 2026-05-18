@@ -39,8 +39,6 @@ git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
 echo "Installing repositories..."
 pip install wheel
 pip install "fastapi[standard]"
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install "minicheck @ git+https://github.com/Liyan06/MiniCheck.git@main"
 pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 echo "Copying configuration files..."

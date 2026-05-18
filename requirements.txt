@@ -1,4 +1,4 @@
-accelerate
+huggingface_hub
 mwparserfromhtml
 mwtokenizer
 pypdf

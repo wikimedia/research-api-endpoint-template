@@ -1,25 +1,17 @@
-from contextlib import asynccontextmanager
 import io
 import json
 import logging
-import os
 from pydantic import Field
+import re
 import secrets
 import time
-import traceback
 from typing import Annotated
 import urllib.parse
-
-# where nearest neighbor index and models will go
-# must be set before library imports
-CACHE_DIR = '/etc/api-endpoint'
-os.environ['HF_HOME'] = CACHE_DIR
-os.environ['NLTK_DATA'] = CACHE_DIR
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from minicheck.minicheck import MiniCheck
+from huggingface_hub import InferenceClient
 import mwparserfromhtml as mw
 from mwtokenizer.tokenizer import Tokenizer
 from pypdf import PdfReader
@@ -37,29 +29,17 @@ UA = 'isaac@wikimedia.org -- ref-check.wmcloud.org'
 trafilatura.settings.DEFAULT_CONFIG['DEFAULT']['USER_AGENT'] = UA
 trafilatura.settings.DEFAULT_CONFIG['DEFAULT']['MAX_REDIRECTS'] = '3'
 
-# MiniCheck model
-MODEL_NAME = 'flan-t5-large'
-MODEL = None
-
-# load in model on startup
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Load in embeddings."""
-    global MODEL
-    logger.info("Loading in model!")
-    MODEL = MiniCheck(model_name=MODEL_NAME, cache_dir=CACHE_DIR)
-    logger.info(f"{MODEL_NAME} (context window = {MODEL.model.max_model_len}) successfully loaded.") 
-    if not os.path.exists(os.path.join(CACHE_DIR, "tokenizers", "punkt_tab")):
-        logger.info("Downloading NLKT resources")
-        import nltk
-        nltk.download('punkt_tab')
-    yield
-    MODEL = None
+MODEL_NAME = 'openai/gpt-oss-20b'
+TEMPERATURE = 0
+TOP_P = 1
+access_token = "hf_..."  # TODO: replace w/ actual
+org = "wikimedia"
+CLIENT = InferenceClient(bill_to=org, api_key=access_token)
 
 # basic security -- these will be changed
 security = HTTPBasic()
-USERNAME = b""
-PASSWORD = b""
+USERNAME = b""  # TODO: replace w/ actual
+PASSWORD = b""  # TODO: replace w/ actual
 def check_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
     username_given = credentials.username.encode("utf8")
     is_correct_username = secrets.compare_digest(username_given, USERNAME)
@@ -77,10 +57,10 @@ description = """Check claims against provided citations in Wikipedia articles.
 Low prediction scores (close to 0) indicate a lack of support for the claim.
 
 Limitations:
-* 770M parameters -- larger [MiniCheck models](https://github.com/Liyan06/MiniCheck/tree/main) exist (7B) but they're too large for Cloud VPS.
-* Intended for English but in theory should work for any supported [Flan T5 Large language](https://huggingface.co/google/flan-t5-large)
+* Using gpt-oss-20b model via HuggingFace Inference (ideally would be gpt-oss-safeguard-20b)
+* Intended for English but in theory should work for many languages though OpenAI does not provide much information about this.
 * Many webpages fail to successfully be scraped -- this is the result of the explosion of AI + scrapers. Some are kind and send 400-level errors. Many just fail non-transparently (to bots).
-* This app is currently behind basic auth so the scraping functionality is less likely to be abused.
+* This app is currently behind basic auth so the scraping / inference functionality is less likely to be abused.
 """
 
 app = FastAPI(title="Basic citation verification API",
@@ -88,7 +68,6 @@ app = FastAPI(title="Basic citation verification API",
                   "name": "Isaac (WMF)",
                   "url": "https://meta.wikimedia.org/wiki/User:Isaac_(WMF)"
                   },
-              lifespan=lifespan,
               description=description)
 
 # Enable CORS for API endpoints
@@ -98,79 +77,94 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+CODE_TO_LABEL = {
+    "CV0.a": "Yes - Direct Evidence",
+    "CV1.a": "No - Contradiction",
+    "CV1.b": "No - Significant Omission",
+    "CV1.c": "Unclear (other language, too complex, etc.)"
+}
+
+DEV_PROMPT = """**Claim Verification Policy (#CV)**
+**GOAL:** Determine whether a CLAIM (defined in <>) is supported by the provided SOURCE_TEXT.
+**REASONING:** low
+
+---
+## DEFINITIONS
+
+- **VERIFIED (Yes)** – The SOURCE_TEXT clearly supports the CLAIM.
+- **UNVERIFIED (No)** – The CLAIM is not supported due to contradiction, missing information, or invalid inference.
+
+---
+## VERIFIED (CV0) (Yes)
+
+- **CV0.a Direct Evidence**  
+    - Every factual entity (who, what, where, when) in the CLAIM is explicitly present in the SOURCE_TEXT. 
+    - The CLAIM uses different wording but preserves the exact same meaning and scope as the SOURCE_TEXT.
+    - The CLAIM is a direct logical result of the SOURCE_TEXT with no assumptions required.
+
+---
+## UNVERIFIED (CV1) (No)
+
+- **CV1.a Contradiction**  
+    - The SOURCE_TEXT explicitly conflicts with the CLAIM.
+
+- **CV1.b Significant Omission**  
+    - The SOURCE_TEXT is missing key information required to validate the CLAIM (e.g., missing date, number, or core fact).
+    - The CLAIM extends beyond the SOURCE_TEXT by adding unsupported specifics or reinterpreting facts.
+    - The SOURCE_TEXT is not relevant to the CLAIM.
+    - The SOURCE_TEXT is a generic or abstract page lacking specific supporting details.
+
+- **CV1.c Unclear / Cannot Determine**  
+    - The SOURCE_TEXT is too complex, in another language, or insufficiently interpretable to make a decision.
+
+
+## EXAMPLES 
+
+| code   | label   | claim                                                             | source_text                                                     | rationale                                  |
+|:-------|:--------|:------------------------------------------------------------------|:----------------------------------------------------------------|:-------------------------------------------|
+| CV0.a  | Yes     | The company was founded in 1985 by John Smith.                    | Acme Corp was established in 1985. Its founder, John Smith...   | All entities explicitly match.             |
+| CV0.a  | Yes     | Apple released the iPhone in 2007.                                | Apple launched its first smartphone, the iPhone, in 2007.       | Same meaning with different wording.       |
+| CV0.a  | Yes     | The company is over 20 years old.                                 | The company was founded in 2000.                                | Age logically exceeds 20 years.            |
+| CV1.a  | No      | The president resigned on March 3.                                | The president remained in office throughout March.              | Direct contradiction.                      |
+| CV1.a  | No      | The product costs $50.                                            | The product is priced at $30.                                   | Conflicting numerical values.              |
+| CV1.b  | No      | The population increased by 12% between 2010 and 2020.            | The population grew significantly during the 2010s.             | Missing exact percentage.                  |
+| CV1.b  | No      | The athlete retired in 2021.                                      | In 2020, the athlete announced plans to retire next year.       | Future plan stated, not confirmed outcome. |
+| CV1.b  | No      | The committee published its findings in 1932.                     | [History of Modern Economics - Google Books - Search - Help]    | Navigation page, no usable content.        |
+| CV1.b  | No      | The volcano erupted in 2010.                                      | This article describes the history of Roman architecture.       | Source unrelated to claim.                 |
+| CV1.c  | No      | The treaty was signed in Paris.                                   | It is believed the treaty was signed in Paris, though disputed. | Hedged statement prevents confirmation.    |
+| CV1.c  | No      | The agreement included 50 countries.                              | Угода охопила понад 40 країн.                                   | Too vague to verify number.                |
+---
+## OUTPUT FORMAT (JSON)
+{
+  "label": "<Yes | No>",
+  "code": "<CV0.a | CV1.a | CV1.b | CV1.c>",
+  "confidence": "<low | medium | high>",
+  "rationale": "<max 30 words>"
+}
+"""
+
+USER_PROMPT = """[CLAIM]:
+Claim page title: {context-article-title}
+Claim section title: {context-section-title}
+Claim context: {context-paragraph}
+Claim content to verify: <{claim}>
+[SOURCE_TEXT]:
+Source title: {source-title}
+Source date: {source-date}
+Source url: {source-url}
+Source content: {source-scraped-text}"""
+
 
 @app.get('/models')
 def get_models():
     return {'model': MODEL_NAME}
 
-@app.get('/get-claims', dependencies=[Depends(check_credentials)])
-def get_claims(
-    title: Annotated[str, Field(description="Wikipedia page title. Leave blank for random page.")] = None, 
-    verify_k: Annotated[int, Field(description="How many URLs to scrape and check? Set to -1 to process all.")] = 0,
-    lang: Annotated[str, Field(description="Wikipedia language edition -- e.g., 'en' for English")] = "en"
-    ):
-    title = get_canonical_page_title(title, lang=lang)
-    if title is None:
-        return {'error': f'no article found for https://{lang}.wikipedia.org/wiki/{title}'}
-    
-    start = time.time()
-    claims = get_all_claims(title=title, lang=lang)
-    if claims is None:
-        return {'error': f'no claims found in https://{lang}.wikipedia.org/wiki/{title}'}
-    time_fetch_wiki_html = time.time() - start
-
-    result = {'article': f'https://{lang}.wikipedia.org/wiki/{title}',
-              'time-fetch-wiki-html': time_fetch_wiki_html,
-              'claims': []
-              }
-    num_checked = 0
-    source_text_cache = {}
-    for url, section, claim_text in claims:
-        claim_result = {'section': section, 'claim_text': claim_text, 'sources':[]}
-        source = {'url': url}
-        if url and claim_text and (verify_k == -1 or num_checked < verify_k):
-            start = time.time()
-            if url not in source_text_cache:
-                num_checked += 1
-                http_status, src_title, src_markdown = get_source(url)
-                time_fetch_source = time.time() - start
-                source['http-status'] = http_status
-                source['src-title'] = src_title
-                source['src-markdown'] = src_markdown
-                source['fetch-time'] = time_fetch_source
-                source_text_cache[url] = source
-            else:
-                http_status = source_text_cache[url]['http-status']
-                src_title = source_text_cache[url]['src-title']
-                src_markdown = source_text_cache[url]['src-markdown']
-                time_fetch_source = time.time() - start
-                source['http-status'] = http_status
-                source['src-title'] = src_title
-                source['src-markdown'] = src_markdown
-                source['fetch-time'] = time_fetch_source
-            if src_markdown:
-                start = time.time()
-                score = get_scores(wiki_claims=[f"{title}. {section}. claim_text"], passage=f'{src_title}. {src_markdown}')[0]
-                predict_time = time.time() - start
-                source['prediction'] = {'score': score, 'score-time': predict_time}
-        claim_result['sources'].append(source)
-        result['claims'].append(claim_result)
-
-    # merge results that share claims
-    for j in range(len(result['claims'])-1, 0, -1):
-        i = j - 1
-        if result['claims'][i]['claim_text'] == result['claims'][j]['claim_text']:
-            result['claims'][i]['sources'].extend(result['claims'][j]['sources'])
-            result['claims'].pop(j)
-
-    return result
-
 
 @app.get('/check-claim', dependencies=[Depends(check_credentials)])
 def check_claim(
+    lang: Annotated[str, Field(description="Wikipedia language edition -- e.g., 'en' for English")] = "en",
     title: Annotated[str, Field(description="Wikipedia page title. Leave blank for random page.")] = None, 
-    citation_no: Annotated[int, Field(description="Which citation to verify? Note: hacky and doesn't always match follow [#] superscripts from article. Just try a few.")] = 1,
-    lang: Annotated[str, Field(description="Wikipedia language edition -- e.g., 'en' for English")] = "en"
+    cite_id: Annotated[str, Field(description="Citation to check. Leave blank for first valid citation.")] = None
     ):
     title = get_canonical_page_title(title, lang=lang)
     if title is None:
@@ -178,34 +172,92 @@ def check_claim(
     
     start = time.time()
     claims = get_all_claims(title=title, lang=lang)
-    if claims is None:
-        return {'error': f'no claims found in https://{lang}.wikipedia.org/wiki/{title}'}
     time_fetch_wiki_html = time.time() - start
+    if not claims:
+        return {'error': f'no claims found in https://{lang}.wikipedia.org/wiki/{title}'}        
+    metadata = {'time-fetch-wiki-html': time_fetch_wiki_html}
 
-    result = {'article': f'https://{lang}.wikipedia.org/wiki/{title}',
-              'time-fetch-wiki-html': time_fetch_wiki_html,
-              }
-    url, section, claim_text = claims[citation_no if citation_no < len(claims) else -1]
-    claim_result = {'section': section, 'claim_text': claim_text, 'url':url}
+    section = None
+    paragraph = None
+    claim_text = None
+    url = None
+    if cite_id:
+        if cite_id not in claims:
+            return {'error': f'no claim matching `{cite_id}` found in https://{lang}.wikipedia.org/wiki/{title}. Try one of these: {list(claims.keys())}'}
+        else:
+            section = claims[cite_id]['heading']
+            paragraph = claims[cite_id]['paragraph']
+            claim_text = claims[cite_id]['sentence']
+            url = claims[cite_id]['ref-url']
+    else:
+        for cid in claims:
+            if claims[cid]['ref-url']:
+                section = claims[cid]['heading']
+                paragraph = claims[cid]['paragraph']
+                claim_text = claims[cid]['sentence']
+                url = claims[cid]['ref-url']
+                cite_id = cid
+                break
+
+    result = {'citation': f'https://{lang}.wikipedia.org/wiki/{title}#{cite_id or ''}'}
+    claim_info = {
+        "context-article-title": title,
+        "context-section-title": section,
+        "context-paragraph": paragraph,
+        "claim": claim_text,
+        "source-url": url,
+        "source-title": None,
+        "source-date": None,
+        "source-scraped-text": None,
+    }
+    result['input'] = claim_info
+    
     if url and claim_text:
         start = time.time()
-        http_status, src_title, src_markdown = get_source(url)
+        http_status, src_title, src_date, src_markdown = get_source(url)
         time_fetch_source = time.time() - start
-        claim_result['http-status'] = http_status
-        claim_result['src-title'] = src_title
-        claim_result['src-markdown'] = src_markdown
-        claim_result['fetch-time'] = time_fetch_source
+        metadata['source-fetch-time'] = time_fetch_source
+        metadata['source-http-status'] = http_status
+        claim_info['source-title'] = src_title
+        claim_info['source-date'] = src_date
+        claim_info['source-scraped-text'] = src_markdown
         if src_markdown:
             start = time.time()
-            score = get_scores(wiki_claims=[f"{title}. {section}. claim_text"], passage=f'{src_title}. {src_markdown}')[0]
+            try:
+                page_lang = get_page_language(src_markdown)
+            except Exception:
+                page_lang = None
+            lang_pred_time = time.time() - start
+            metadata['source-language'] = page_lang
+            metadata['time-page-language'] = lang_pred_time
+            start = time.time()
+            prediction, reasoning = get_prediction(claim_info)
+            try:
+                prediction['full-label'] = CODE_TO_LABEL[prediction['code']]
+            except Exception:
+                pass
             predict_time = time.time() - start
-            claim_result['prediction'] = {'score': score, 'score-time': predict_time}
-    result['result'] = claim_result
+            metadata['time-model-prediction'] = predict_time
+            result['output'] = {'prediction': prediction, 'reasoning': reasoning}
 
+    result['metadata'] = metadata
     return result
+
+def get_page_language(source_text):
+    inference_url = 'https://api.wikimedia.org/service/lw/inference/v1/models/langid:predict'
+    headers = {
+        'User-Agent': UA,
+        'Content-type': 'application/json'
+        }
+    data = {"text": source_text}
+    response = requests.post(inference_url,
+                             headers=headers,
+                             data=json.dumps(data))
+    return response.json()
+
         
 
-def get_page_html(lang, title):
+def get_page_html(lang: str, title: str):
     try:
         title = title.replace(" ", "_")
         title = urllib.parse.quote_plus(title)
@@ -216,15 +268,11 @@ def get_page_html(lang, title):
         return None
     
 
-def extract_claims(article, lang="en"):
-    """Yield claims along with supporting URLs where available.
-
-    More general solution for elements w/ sentence context:
-    https://public-paws.wmcloud.org/User:Isaac_(WMF)/HTML-dumps/get-element-with-context.ipynb
-    """
+def extract_claims(article: mw.Article, lang: str = "en"):
+    """Yield claims along with context+supporting URLs where available."""
     tokenizer = Tokenizer(language_code=lang)
     references = references_to_urls(article)
-    for heading, section_text, element_indices, citation_ids in _yield_plaintext_with_elements(article):
+    for heading, paragraph_text, element_indices, citation_ids in _yield_plaintext_with_elements(article):
         # skip sections w/o our element of interest
         if not element_indices:
             continue
@@ -247,35 +295,20 @@ def extract_claims(article, lang="en"):
             merged_element_indices.append((start_idx, end_idx, ele_text))
             merged_citation_ids.append(citation_ids[i])
             i = j
-                
-        # we're doing sentence context just within a paragraph
-        # but this could be easily adjusted to be across the whole section.
-        para_start_idx = 0
-        for paragraph in section_text.split("\n"):
-            para_end_idx = para_start_idx + len(paragraph)
-            # split paragraph into sentences
-            sentences = list(tokenizer.sentence_tokenize(paragraph, use_abbreviation=True))
-            for i, (ele_start, ele_end, ele_text) in enumerate(merged_element_indices):
-                # element that's within the paragraph somewhere
-                if ele_start >= para_start_idx and ele_end <= para_end_idx:
-                    # now find which sentence has it
-                    ref_url = references.get(merged_citation_ids[i])
-                    sent_start_idx = 0
-                    for sent_idx, sentence in enumerate(sentences):
-                        sent_end_idx = sent_start_idx + len(sentence)
-                        # found the containing sentence
-                        if ele_start >= sent_start_idx and ele_end <= sent_end_idx:
-                            break
-                        sent_start_idx = sent_end_idx
-                    s = sentences[sent_idx]
-                    #offset = len("".join(sentences[:sent_idx]))
-                    #ele_start = ele_start - offset
-                    #ele_end = ele_end - offset
-                    #marked_sentence = s[:ele_start] + "{{" + s[ele_start:ele_end] + "}}" + s[ele_end:]
-                    yield(heading, s, ele_text, ref_url)
-            # split function removes "\n" char so we have
-            # to account for that while tracking index
-            para_start_idx += len(paragraph) + 1
+                    
+        # split paragraph into sentences
+        sentences = list(tokenizer.sentence_tokenize(paragraph_text, use_abbreviation=True))
+        for i, (ele_start, ele_end, ele_text) in enumerate(merged_element_indices):
+            # now find which sentence has it
+            ref_url = references.get(merged_citation_ids[i])
+            sent_start_idx = 0
+            for sent_idx, sentence in enumerate(sentences):
+                sent_end_idx = sent_start_idx + len(sentence)
+                # found the containing sentence
+                if ele_start >= sent_start_idx and ele_end <= sent_end_idx:
+                    break
+                sent_start_idx = sent_end_idx
+            yield(heading, paragraph_text, sentences[sent_idx], merged_citation_ids[i], ref_url)
 
 def _html_to_plaintext(parent_node, transcluded=False, parent_types=None, para_context=None, metadata=None):
     """Overwrite html_to_plaintext from mwparserfromhtml to carry citation IDs."""
@@ -297,7 +330,7 @@ def _html_to_plaintext(parent_node, transcluded=False, parent_types=None, para_c
                 last_para = i
     elif element == "Citation":
         try:
-            metadata.append(parent_node.find('a')['href'].rsplit('#', maxsplit=1)[1])
+            metadata.append(parent_node['id'])
         except Exception:
             metadata.append(None)
 
@@ -349,16 +382,16 @@ def _yield_plaintext_with_elements(article: mw.Article):
         "Comment",
         "Heading",
         #"Infobox",
+        "InlineCleanup",
         #"List",
         "Math",
         "Media-audio",
         "Media-img",
         "Media-video",
         "Messagebox",
-        "Navigational",
+        "Navigation",
         "Note",
         "Reference",
-        "TF-sup",  # superscript: a little excessive but gets non-citation notes such as citation-needed tags.
         #"Table",
         #"Wikitable",
     }
@@ -368,7 +401,7 @@ def _yield_plaintext_with_elements(article: mw.Article):
     # want List elements, then you'll want to comment
     # out "between-paras"
     exclude_para_contexts = {
-        "pre-first-para",
+        #"pre-first-para",
         #"between-paras",
         "post-last-para"
     }
@@ -458,18 +491,8 @@ def _yield_plaintext_with_elements(article: mw.Article):
             yield (heading, plaintext, element_indices, citation_ids)
 
 
-def citations_to_refs(article: mw.Article):
-    citations = {}
-    for cit in article.wikistew.get_citations():
-        try:
-            cite_id = cit.html_tag.find('a')['href'].rsplit('#', maxsplit=1)[1]
-            cite_text = cit.html_tag.text
-            citations[cite_text] = cite_id
-        except Exception:
-            continue
-    return citations
-
 def references_to_urls(article: mw.Article):
+    """Build dictionary of citation IDs -> reference URLs"""
     references = {}
     for ref in article.wikistew.get_references():
         urls = mw.WikiStew(ref.html_tag).get_externallinks()
@@ -483,27 +506,36 @@ def references_to_urls(article: mw.Article):
                 if start_of_archived_url != -1:
                     link = path[start_of_archived_url:]
                     break
+                elif len(urls) == 1:
+                    link = url.link
             else:
                 link = url.link
                 break
-        references[ref.ref_id] = link
+        for linkback in ref.html_tag.find_all('a'):
+            try:
+                if 'mw-linkback-text' in linkback.span['class']:
+                    anchor = linkback['href'].split('#')[-1]
+                    references[anchor] = link
+            except Exception:
+                continue
     return references
     
 def get_all_claims(title: str, lang: str = "en"):
+    """Extract all claims+info from the article."""
     page_html = get_page_html(lang=lang, title=title)
+    claims = {}
     if page_html:
-        claims = []
         article = mw.Article(page_html, flatten_sections=True)
-        for heading, sentence, _, ref_url in extract_claims(article, lang=lang):
-            claims.append((ref_url, heading, sentence))
-        return claims
-    else:
-        return None
+        for heading, paragraph_text, sentence, cite_id, ref_url in extract_claims(article, lang=lang):
+            claims[cite_id] = {'heading': heading, 'paragraph': paragraph_text, 'sentence': sentence, 'ref-url': ref_url}
+    return claims
 
 
 def get_source(url: str):
+    """Scrape a URL."""
     http_status = None
     title = None
+    date = None
     plaintext = None
     source_response = trafilatura.fetch_response(
         url = url,
@@ -518,6 +550,7 @@ def get_source(url: str):
                     with io.BytesIO(source_response.data) as f:
                         plaintext = []
                         title = reader.metadata.get('/Title')
+                        date = reader.metadata.get('/CreationDate')
                         reader = PdfReader(f)
                         for page in reader.pages:
                             plaintext.append(page.extract_text().strip())
@@ -530,22 +563,66 @@ def get_source(url: str):
                 try:
                     extracted = json.loads(extract)
                     title = extracted['title'] if "web.archive.org" not in url else ""
+                    date = extracted['date']
                     plaintext = extracted['text']
                 except Exception:
                     pass
-    return http_status, title, plaintext
+    return http_status, title, date, plaintext
 
 
-def get_scores(wiki_claims, passage):
+def get_prediction(claim_info):
     """Score the support of a claim from a given passage."""
-    docs = [passage] * len(wiki_claims)
+    messages = [
+        {"role": "user", "content": USER_PROMPT.format(**claim_info)},
+        {"role": "developer", "content": DEV_PROMPT}
+        ]
     try:
-        _, raw_probs, _, _ = MODEL.score(docs=docs, claims=wiki_claims)
-    except Exception:
-        traceback.print_exc()
-        raw_probs = [None] * len(wiki_claims)
-    return raw_probs
+        resp = CLIENT.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=messages,
+                    temperature=TEMPERATURE,
+                    top_p=TOP_P,
+                    max_tokens=4096,
+                )
+    except Exception as e:
+        return (f"error in completion request: {str(e)}", None)
 
+    try:
+        output_str = resp['choices'][0]['message']['content']
+    except Exception:
+        output_str = None
+
+    try:
+        reasoning = resp['choices'][0]['message']['reasoning']
+    except Exception:
+        reasoning = None
+
+    prediction = output_str
+    if output_str:
+        try:
+            prediction = extract_json(output_str)
+        except Exception:
+            try:
+                prediction = json.loads(output_str)
+            except Exception:
+                try:
+                    prediction = json.loads(output_str.strip().replace('\\", ', '\\"", '))                
+                except Exception:
+                    pass
+        
+    return (prediction, reasoning)
+
+def extract_json(text):
+    """Helper function for extracting JSON from model's text response."""
+    pattern = r'(\{).*(\})'
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        json_str = match.group(0).replace('\"', '"').replace('\\n', '\n')
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            return None
+    return None
 
 def get_canonical_page_title(title: str, lang: str = 'en'):
     """Get canonical title -- resolving redirects and standardizing form"""
