@@ -3,7 +3,6 @@
 
 # these can be changed but most other variables should be left alone
 APP_LBL='api-endpoint'  # descriptive label for endpoint-related directories
-REPO_LBL='edit-types'  # directory where repo code will go
 GIT_CLONE_HTTPS='https://github.com/geohci/research-api-endpoint-template.git'  # for `git clone`
 GIT_BRANCH='edit-types'
 
@@ -35,21 +34,21 @@ python3 -m venv ${LIB_PATH}/p3env
 source ${LIB_PATH}/p3env/bin/activate
 
 echo "Cloning repositories..."
-git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${REPO_LBL}
+git clone --branch ${GIT_BRANCH} ${GIT_CLONE_HTTPS} ${TMP_PATH}/${GIT_BRANCH}
 
 echo "Installing repositories..."
 pip install wheel
 pip install "fastapi[standard]"
-pip install -r ${TMP_PATH}/${REPO_LBL}/requirements.txt
+pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 echo "Setting up ownership..."  # makes www-data (how nginx is run) owner + group for all data etc.
 chown -R www-data:www-data ${ETC_PATH}
 chown -R www-data:www-data ${LIB_PATH}
 
 echo "Copying configuration files..."
-cp ${TMP_PATH}/${REPO_LBL}/model/main.py ${ETC_PATH}
-cp ${TMP_PATH}/${REPO_LBL}/model/config/model.service /etc/systemd/system/
-cp ${TMP_PATH}/${REPO_LBL}/model/config/model.nginx /etc/nginx/sites-available/model
+cp ${TMP_PATH}/${GIT_BRANCH}/model/main.py ${ETC_PATH}
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.service /etc/systemd/system/
+cp ${TMP_PATH}/${GIT_BRANCH}/model/config/model.nginx /etc/nginx/sites-available/model
 if [[ -f "/etc/nginx/sites-enabled/model" ]]; then
     unlink /etc/nginx/sites-enabled/model
 fi
