@@ -1,31 +1,38 @@
-import os
+import logging
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import mwapi
 from mwparserfromhtml import Article
 import requests
-import yaml
 
-app = Flask(__name__)
-__dir__ = os.path.dirname(__file__)
+UA = 'isaac@wikimedia.org -- mwparserfromhtml api'
 
-# load in app user-agent or any other app config
-app.config.update(
-    yaml.safe_load(open(os.path.join(__dir__, 'flask_config.yaml'))))
-
+app = FastAPI()
 # Enable CORS for API endpoints
-cors = CORS(app, resources={r'/api/*': {'origins': '*'}})
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_headers=["*"],
+)
 
-@app.route('/api/v1/parse-article', methods=['GET'])
-def parse_article():
-    lang, title, error = validate_api_args()
-    if error:
-        return jsonify({'error': error})
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.get('/api/v1/parse-article')
+def parse_article(lang: str, title: str):
+    if lang and title:
+        lang = lang.lower()
+        page_title = get_canonical_page_title(title, lang)
+        if not page_title:
+            return {'error': f'no matching article for "https://{lang}.wikipedia.org/wiki/{title}"'}
+    else:
+        return {'error': 'please include both `lang` and `title` values -- e.g., `..?lang=en&title=Chicago`.'}
+
     article_html = get_article_html(lang, title)
     plaintext, features = parse_html(article_html)
-    return jsonify({'lang': lang, 'title': title,
-                    'plaintext': plaintext, 'features': features})
+    return {'lang': lang, 'title': title,
+            'plaintext': plaintext, 'features': features}
 
 def parse_html(raw_html):
     """Extract plaintext and various features from Wikipedia article HTML.
@@ -52,7 +59,7 @@ def parse_html(raw_html):
 def get_article_html(lang, title):
     """Get Parsoid HTML for article."""
     html_endpoint = f"https://{lang}.wikipedia.org/w/rest.php/v1/page/{title}/html"
-    response = requests.get(html_endpoint, headers={'User-Agent': app.config['CUSTOM_UA']})
+    response = requests.get(html_endpoint, headers={'User-Agent': UA})
 
     try:
         return response.text
@@ -62,7 +69,7 @@ def get_article_html(lang, title):
 
 def get_canonical_page_title(title, lang):
     """Resolve redirects / normalization -- used to verify that an input page_title exists"""
-    session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=app.config['CUSTOM_UA'])
+    session = mwapi.Session('https://{0}.wikipedia.org'.format(lang), user_agent=UA)
 
     result = session.get(
         action="query",
@@ -79,26 +86,5 @@ def get_canonical_page_title(title, lang):
         return result['query']['pages'][0]['title'].replace(' ', '_')
 
 
-def validate_api_args():
-    """Validate API arguments for language-agnostic model."""
-    error = None
-    lang = None
-    page_title = None
-    if request.args.get('title') and request.args.get('lang'):
-        lang = request.args['lang']
-        page_title = get_canonical_page_title(request.args['title'], lang)
-        if page_title is None:
-            error = 'no matching article for <a href="https://{0}.wikipedia.org/wiki/{1}">https://{0}.wikipedia.org/wiki/{1}</a>'.format(lang, request.args['title'])
-    elif request.args.get('lang'):
-        error = 'missing an article title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-    elif request.args.get('title'):
-        error = 'missing a language -- e.g., "en" for English'
-    else:
-        error = 'missing language -- e.g., "en" for English -- and title -- e.g., "2005_World_Series" for <a href="https://en.wikipedia.org/wiki/2005_World_Series">https://en.wikipedia.org/wiki/2005_World_Series</a>'
-
-    return lang, page_title, error
-
-application = app
-
 if __name__ == '__main__':
-    application.run()
+    app.run()

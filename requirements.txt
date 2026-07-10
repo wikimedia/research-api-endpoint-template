@@ -1,7 +1,3 @@
-Flask
-Flask-Cors
 mwapi
 mwparserfromhtml
-PyYAML
 requests
-uWSGI
