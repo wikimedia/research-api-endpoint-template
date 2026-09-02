@@ -23,7 +23,7 @@ source ${LIB_PATH}/p3env/bin/activate
 
 echo "Installing repositories..."
 pip install wheel
-pip install gunicorn[gevent]
+pip install "fastapi[standard]"
 pip install -r ${TMP_PATH}/${GIT_BRANCH}/requirements.txt
 
 # update config / code -- if only changing Python and not nginx/uwsgi code, then much of this can be commented out

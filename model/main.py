@@ -10,8 +10,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#SUGGESTIONS_DB = SqliteDict("/etc/api-endpoint/suggestions.db")
-SUGGESTIONS_DB = SqliteDict("./suggestions.db")
+SUGGESTIONS_DB = SqliteDict("/etc/api-endpoint/suggestions.db")
+#SUGGESTIONS_DB = SqliteDict("./suggestions.db")
 print(f"There are {len(SUGGESTIONS_DB)} pages in the database.")
 
 @app.post('/v1/models/editing-suggestions:predict')
