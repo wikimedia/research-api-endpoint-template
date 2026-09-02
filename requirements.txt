@@ -1,4 +1,1 @@
-mwapi
-mwparserfromhtml
-requests
-tldextract
+sqlitedict
