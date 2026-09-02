@@ -9,6 +9,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_headers=["*"],
+    allow_methods=["POST"]
 )
 
 SUGGESTIONS_DB = SqliteDict("/etc/api-endpoint/suggestions.db")
