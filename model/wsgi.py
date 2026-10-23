@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import os
@@ -207,14 +208,21 @@ def title_to_linkstr(lang, title):
 
 
 def get_country_predictions(lang, title):
-    # https://wiki-region.wmcloud.org/regions?lang=en&title=Japanese%20iris
-    base_url = 'https://wiki-region.wmcloud.org/regions'
-    params = {
+    base_url = 'https://api.wikimedia.org/service/lw/inference/v1/models/article-country:predict'
+    headers = {
+        'User-Agent': app.config['CUSTOM_UA'],
+        'Content-type': 'application/json'
+        }
+    data = {
         "lang": lang,
         "title": title
         }
-    response = requests.get(base_url, params)
-    countries = response.json().get('countries', [])
+    response = requests.post(base_url, headers=headers, data=json.dumps(data))
+    result = response.json()
+    try:
+        countries = [c['country'] for c in result['prediction']['results']]
+    except Exception:
+        countries = []
     return countries
 
 def value_to_years(d):
