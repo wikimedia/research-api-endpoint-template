@@ -1,6 +1,5 @@
 import argparse
 import csv
-import traceback
 
 from sqlitedict import SqliteDict
 
@@ -13,6 +12,8 @@ def build_dictionary(input_fn: str, output_fn: str, wiki_db: str):
     suggestions = 0
     errors = 0
     skipped = 0
+    # was getting a weird encoding issue with one of the test files so added
+    # utf-8-sig to help with that. could potentially drop if no longer is an issue.
     with open(input_fn, 'r', encoding='utf-8-sig') as fin:
         csvreader = csv.DictReader(fin)
         for line in csvreader:
@@ -56,6 +57,10 @@ def build_dictionary(input_fn: str, output_fn: str, wiki_db: str):
     db.commit()
     db.close()
 
+# the way sqllite dictionaries work, you can either use this to create a fresh database
+# or to append to an existing one (by running the script multiple times with the same --output_fn)
+# if you're trying to do an "update" though, there's no code for that and you'd just have to start
+# fresh again (or add a function for flushing an entire wiki_db from the database).
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_fn', help="CSV file with suggestions.")
